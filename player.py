@@ -1,6 +1,6 @@
 #!/usr/bin/python
 
-import Tkinter, os
+import Tkinter, os, json
 from Tkinter import TOP, BOTTOM, LEFT, RIGHT, SINGLE, END, X, Y, BOTH
 
 ##top.attributes("-fullscreen", True)
@@ -11,17 +11,20 @@ from Tkinter import TOP, BOTTOM, LEFT, RIGHT, SINGLE, END, X, Y, BOTH
 ##os.environ["SDL_MOUSEDRV"] = "TSLIB"
 
 top = Tkinter.Tk()
+here = os.path.dirname(__file__)
 
 class Player(object):
-
     def __init__(self, top):
-        
         self.selected_stream = None
-        self.streams = \
-            [('dradio', 'http://dradio_mp3_dlf_s.akacast.akamaistream.net/7/251/142684/v1/gnl.akacast.akamaistream.net/dradio_mp3_dlf_s'),
-             ('soma 80s', 'http://ice.somafm.com/u80s-64.aac'),
-             ('mdr info', 'http://c22033-ls.i.core.cdn.streamfarm.net/QpZptC4ta9922033/22033mdr/live/app2128740352/w2128904192/live_de_128.mp3'),
-             ]
+        fn = 'streams.json'
+        assert os.path.exists(fn), "error: file %s not found" %fn 
+        with open(fn) as fd:
+            self.streams = json.load(fd)
+        # {'radio1': {'url': http:/foo/bar}} ->
+        # {'radio1': {'url': http:/foo/bar}, 'name': 'radio1'}
+        for k,dct in self.streams.iteritems():
+            dct['name'] = k
+        print self.streams    
 
         button_play = Tkinter.Button(top, 
                                      text="Play", 
@@ -37,8 +40,8 @@ class Player(object):
                                   selectmode=SINGLE)
         listbox.bind("<<ListboxSelect>>", self.callback_listbox)
         
-        for name,url in self.streams:
-            listbox.insert(END, name)
+        for stream_name in self.streams.iterkeys():
+            listbox.insert(END, stream_name)
         
         button_play.pack(side=LEFT)
         button_stop.pack(side=LEFT)
@@ -57,13 +60,15 @@ class Player(object):
         if self.selected_stream is None:
             print "error: no stream"
         else:    
-            print "playing: %s" %self.selected_stream[0]
-            os.system(r"mplayer %s &" %self.selected_stream[1])
+            print "playing: %s" %self.selected_stream['name']
+            os.system(r"mplayer %s &" %self.selected_stream['url'])
         
     def callback_listbox(self, event):
-        selection = event.widget.curselection()
-        print "selection: ", selection
-        self.selected_stream = self.streams[int(selection[0])]
+        # tuple (1,) or ('1',) on raspi -> 1
+        stream_idx = int(event.widget.curselection()[0])
+        print "stream_idx: ", stream_idx
+        key = self.streams.keys()[stream_idx]
+        self.selected_stream = self.streams[key]
     
     def __del__(self):
         self.action_stop()
