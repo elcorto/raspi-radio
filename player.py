@@ -4,29 +4,14 @@ import Tkinter, os, json
 from Tkinter import TOP, BOTTOM, LEFT, RIGHT, SINGLE, END, X, Y, BOTH
 pj = os.path.join
 
-##top.attributes("-fullscreen", True)
-##top.attributes("-zoomed", True) # show window elements (close button etc)
-
-##os.environ["SDL_FBDEV"] = "/dev/fb1"
-##os.environ["SDL_MOUSEDEV"] = "/dev/input/touchscreen"
-##os.environ["SDL_MOUSEDRV"] = "TSLIB"
-
 top = Tkinter.Tk()
 here = os.path.dirname(__file__)
 
 class Player(object):
     def __init__(self, top):
         self.selected_stream = None
-        fn = pj(here, 'streams.json')
-        assert os.path.exists(fn), "error: file %s not found" %fn 
-        with open(fn) as fd:
-            self.streams = json.load(fd)
-        # {'radio1': {'url': http:/foo/bar}} ->
-        # {'radio1': {'url': http:/foo/bar}, 'name': 'radio1'}
-        for k,dct in self.streams.iteritems():
-            dct['name'] = k
-        print self.streams    
-
+        self.streams = self.load_streams()
+    
         button_play = Tkinter.Button(top, 
                                      text="Play", 
                                      command=self.callback_play)
@@ -49,9 +34,9 @@ class Player(object):
         scrollbar.pack(side=RIGHT, fill=Y)
         scrollbar.config(command=listbox.yview)
         listbox.pack(side=LEFT)
-    
-    def action_stop(self):
-        os.system("killall mplayer")
+
+    def __del__(self):
+        self.action_stop()
 
     def callback_stop(self):
         self.action_stop()
@@ -62,7 +47,7 @@ class Player(object):
             print "error: no stream"
         else:    
             print "playing: %s" %self.selected_stream['name']
-            os.system(r"mplayer %s &" %self.selected_stream['url'])
+            self.action_play()
         
     def callback_listbox(self, event):
         # tuple (1,) or ('1',) on raspi -> 1
@@ -70,11 +55,26 @@ class Player(object):
         print "stream_idx: ", stream_idx
         key = self.streams.keys()[stream_idx]
         self.selected_stream = self.streams[key]
+
+
+class JsonPlayer(Player):
+    def load_streams(self):
+        fn = pj(here, 'streams.json')
+        assert os.path.exists(fn), "error: file %s not found" %fn 
+        with open(fn) as fd:
+            streams = json.load(fd)
+        # {'radio1': {'url': http:/foo/bar}} ->
+        # {'radio1': {'url': http:/foo/bar}, 'name': 'radio1'}
+        for k,dct in streams.iteritems():
+            dct['name'] = k
+        return streams
+
+    def action_stop(self):
+        os.system("killall mplayer")
     
-    def __del__(self):
-        self.action_stop()
+    def action_play(self):
+        os.system(r"mplayer %s &" %self.selected_stream['url'])
+    
 
-
-p = Player(top)
-
+p = JsonPlayer(top)
 top.mainloop()
