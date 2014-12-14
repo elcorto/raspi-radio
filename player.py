@@ -1,6 +1,6 @@
 #!/usr/bin/python
 
-import Tkinter, os, json
+import Tkinter, os, json, tkFont
 from Tkinter import TOP, BOTTOM, LEFT, RIGHT, SINGLE, END, X, Y, BOTH
 pj = os.path.join
 
@@ -24,20 +24,22 @@ class Player(object):
                                      command=self.callback_stop)
 
         scrollbar = Tkinter.Scrollbar(top, width=30)
+        font = tkFont.Font (size=15)
         listbox = Tkinter.Listbox(top, 
                                   yscrollcommand=scrollbar.set,
-                                  selectmode=SINGLE)
+                                  selectmode=SINGLE,
+                                  font=font)
         listbox.bind("<<ListboxSelect>>", self.callback_listbox)
         
         for stream in self.streams:
             listbox.insert(END, stream['name'])
         
-        button_play.pack(side=LEFT)
-        button_stop.pack(side=LEFT)
-        scrollbar.pack(side=RIGHT, fill=Y)
+        button_play.place(relx=0, rely=0.1)
+        button_stop.place(relx=0, rely=0.3)
+        scrollbar.place(relx=0.9, relheight=1)
         scrollbar.config(command=listbox.yview)
-        listbox.pack(side=LEFT)
-
+        listbox.place(relx=0.2, relwidth=0.7, relheight=1)
+        
         self.action_load_current_stream() 
         if self.selected_stream is not None:
             self.action_play()
@@ -92,5 +94,7 @@ class JsonPlayer(Player):
 if __name__ == '__main__':
     
     top = Tkinter.Tk()
+    top.geometry("320x210")
+    top.wm_title("raspi radio")
     p = JsonPlayer(top)
     top.mainloop()
