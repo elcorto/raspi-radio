@@ -2,6 +2,7 @@
 
 import Tkinter, os, json
 from Tkinter import TOP, BOTTOM, LEFT, RIGHT, SINGLE, END, X, Y, BOTH
+pj = os.path.join
 
 ##top.attributes("-fullscreen", True)
 ##top.attributes("-zoomed", True) # show window elements (close button etc)
@@ -16,7 +17,7 @@ here = os.path.dirname(__file__)
 class Player(object):
     def __init__(self, top):
         self.selected_stream = None
-        fn = 'streams.json'
+        fn = pj(here, 'streams.json')
         assert os.path.exists(fn), "error: file %s not found" %fn 
         with open(fn) as fd:
             self.streams = json.load(fd)
