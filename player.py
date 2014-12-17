@@ -1,7 +1,8 @@
 #!/usr/bin/python
 
-import Tkinter, os, json, tkFont, socket
-from Tkinter import TOP, BOTTOM, LEFT, RIGHT, SINGLE, END, X, Y, BOTH
+import os, json, tkFont, socket
+from Tkinter import TOP, BOTTOM, LEFT, RIGHT, SINGLE, END, X, Y, BOTH, \
+    Button, Scrollbar, Listbox, Tk, S
 pj = os.path.join
 
 here = os.path.dirname(__file__)
@@ -15,35 +16,35 @@ class Player(object):
         #  ]
         self.streams = self.load_streams()
     
-        button_play = Tkinter.Button(top, 
-                                     text="Play", 
-                                     command=self.callback_play)
+        button_play = Button(top, 
+                             text="Play", 
+                             command=self.callback_play)
         
-        button_stop = Tkinter.Button(top, 
-                                     text="Stop", 
-                                     command=self.callback_stop)
+        button_stop = Button(top, 
+                             text="Stop", 
+                             command=self.callback_stop)
 
-        button_shutdown = Tkinter.Button(top, 
-                                         text="Power\noff", 
-                                         command=self.callback_shutdown)
+        button_shutdown = Button(top, 
+                                 text="Shut down", 
+                                 command=self.callback_shutdown)
 
-        scrollbar = Tkinter.Scrollbar(top, width=30)
+        scrollbar = Scrollbar(top, width=30)
         font = tkFont.Font(size=15)
-        listbox = Tkinter.Listbox(top, 
-                                  yscrollcommand=scrollbar.set,
-                                  selectmode=SINGLE,
-                                  font=font)
+        listbox = Listbox(top, 
+                          yscrollcommand=scrollbar.set,
+                          selectmode=SINGLE,
+                          font=font)
         listbox.bind("<<ListboxSelect>>", self.callback_listbox)
         
         for stream in self.streams:
             listbox.insert(END, stream['name'])
         
-        button_play.place(relx=0, rely=0.1)
-        button_stop.place(relx=0, rely=0.3)
-        button_shutdown.place(relx=0, rely=0.8)
-        scrollbar.place(relx=0.9, relheight=1)
+        button_play.place(relx=0, rely=0)
+        button_stop.place(relx=0.2, rely=0)
+        button_shutdown.place(relx=0.4, rely=0)
+        scrollbar.place(relx=0.9, rely=0.2, relheight=0.8)
         scrollbar.config(command=listbox.yview)
-        listbox.place(relx=0.2, relwidth=0.7, relheight=1)
+        listbox.place(relx=0, rely=0.2, relwidth=0.9, relheight=0.8)
         
         self.action_load_current_stream() 
         if self.selected_stream is not None:
@@ -108,7 +109,7 @@ class JsonPlayer(Player):
 
 if __name__ == '__main__':
     
-    top = Tkinter.Tk()
+    top = Tk()
     top.geometry("320x210")
     top.wm_title("raspi radio")
     p = JsonPlayer(top)
