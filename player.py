@@ -1,6 +1,6 @@
 #!/usr/bin/python
 
-import Tkinter, os, json, tkFont
+import Tkinter, os, json, tkFont, socket
 from Tkinter import TOP, BOTTOM, LEFT, RIGHT, SINGLE, END, X, Y, BOTH
 pj = os.path.join
 
@@ -23,8 +23,12 @@ class Player(object):
                                      text="Stop", 
                                      command=self.callback_stop)
 
+        button_shutdown = Tkinter.Button(top, 
+                                         text="Power\noff", 
+                                         command=self.callback_shutdown)
+
         scrollbar = Tkinter.Scrollbar(top, width=30)
-        font = tkFont.Font (size=15)
+        font = tkFont.Font(size=15)
         listbox = Tkinter.Listbox(top, 
                                   yscrollcommand=scrollbar.set,
                                   selectmode=SINGLE,
@@ -36,14 +40,19 @@ class Player(object):
         
         button_play.place(relx=0, rely=0.1)
         button_stop.place(relx=0, rely=0.3)
+        button_shutdown.place(relx=0, rely=0.8)
         scrollbar.place(relx=0.9, relheight=1)
         scrollbar.config(command=listbox.yview)
         listbox.place(relx=0.2, relwidth=0.7, relheight=1)
         
         self.action_load_current_stream() 
         if self.selected_stream is not None:
+            keys = [ss['name'] for ss in self.streams]
+            idx = keys.index(self.selected_stream['name'])
+            listbox.selection_set(idx)
+            listbox.see(idx)
             self.action_play()
-
+    
     def __del__(self):
         self.action_stop()
 
@@ -65,6 +74,12 @@ class Player(object):
         print "stream_idx: ", stream_idx
         self.selected_stream = self.streams[stream_idx]
 
+    def callback_shutdown(self):
+        if socket.gethostname() == 'raspi':
+            os.system("sudo halt")
+        else:
+            print "shutdown works only on raspi"
+    
 
 class JsonPlayer(Player):
     _fn_last_stream = pj(here, 'last_stream.json')
