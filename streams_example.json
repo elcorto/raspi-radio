@@ -16,5 +16,14 @@
     },
     {"name": "flux fm",
      "url":  "http://fluxfm.de/stream-berlin"
+    },
+    {"name": "coloradio DD",
+     "url":  "http://streaming.fueralle.org:8000/coloradio_160.ogg"
+    },
+    {"name": "dubstep.fm",
+     "url":  "http://72.13.86.6:80"
+    },
+    {"name": "Birdsong.fm",
+     "url":  "http://174.36.1.92:8062/live"
     }
 ]
