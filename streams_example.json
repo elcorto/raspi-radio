@@ -2,11 +2,14 @@
     {"name": "dradio",
      "url":  "http://dradio_mp3_dlf_s.akacast.akamaistream.net/7/251/142684/v1/gnl.akacast.akamaistream.net/dradio_mp3_dlf_s"
     },
+    {"name": "mdr info",
+     "url":  "http://c22033-ls.i.core.cdn.streamfarm.net/QpZptC4ta9922033/22033mdr/live/app2128740352/w2128904192/live_de_128.mp3"
+    },
     {"name": "soma 80s",
      "url":  "http://ice.somafm.com/u80s"
     },
-    {"name": "mdr info",
-     "url":  "http://c22033-ls.i.core.cdn.streamfarm.net/QpZptC4ta9922033/22033mdr/live/app2128740352/w2128904192/live_de_128.mp3"
+    {"name": "soma groove",
+     "url":  "http://ice.somafm.com/groovesalad"
     },
     {"name": "fm4",
      "url":  "http://mp3stream1.apasf.apa.at:8000/"

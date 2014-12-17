@@ -26,6 +26,16 @@ so mpd/mpc is not needed. We store the last played stream in
 stream URIs from downloaded m3u or pls files, just look into the files and copy
 the URIs to ``stream.json`` and define a stream name.
 
+Install
+-------
+::
+    
+    mkdir raspi-radio
+    cp /from/somewhere/* raspi-radio/
+    cp raspi-radio/icon-raspi-radio-white.png .icons/
+    cp raspi-radio/raspi-radio.desktop Desktop/
+    cp /from/somewhere/streams.json raspi-radio/
+
 Usage
 -----
 ::

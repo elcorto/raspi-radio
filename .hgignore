@@ -7,3 +7,4 @@ syntax: glob
 *.swp
 *.swo
 last_stream.json
+streams.json

@@ -1,0 +1,6 @@
+[Desktop Entry]
+Encoding=UTF-8
+Name=raspi-radio
+Exec=/home/pi/raspi-radio/start.sh
+Icon=icon-raspi-radio-white
+Type=Application
