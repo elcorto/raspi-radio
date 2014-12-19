@@ -42,6 +42,10 @@ class Player(object):
                                  text="Shut down", 
                                  command=self.callback_shutdown)
 
+        button_close = Button(root, 
+                              text="Close", 
+                              command=self.callback_close)
+
         text = Text(root, height=1)
         
         scrollbar = Scrollbar(root, width=30)
@@ -56,7 +60,8 @@ class Player(object):
         scrollbar.config(command=listbox.yview)
         
         button_stop.place(relx=0, rely=0)
-        button_play.place(relx=0.3, rely=0)
+        button_play.place(relx=0.2, rely=0)
+        button_close.place(relx=0.5, rely=0)
         button_shutdown.place(relx=0.7, rely=0)
         scrollbar.place(relx=0.9, rely=0.2, relheight=0.7)
         listbox.place(relx=0, rely=0.2, relwidth=0.9, relheight=0.7)
@@ -72,7 +77,7 @@ class Player(object):
         # start polling loop with recursive self.poll_current_metadata_queue()
         self.root.after(self._polltime_ms, self.poll_current_metadata_queue)
         
-        root.protocol("WM_DELETE_WINDOW", self.root_del_handler)
+        root.protocol("WM_DELETE_WINDOW", self.callback_close)
         
         self.action_load_last_stream() 
         if self.selected_stream is not None:
@@ -81,12 +86,6 @@ class Player(object):
             listbox.selection_set(idx)
             listbox.see(idx)
             self.callback_play()
-    
-    def root_del_handler(self):
-        self.action_stop()
-        self._stop_thread = True
-        self.root.destroy()
-        msg("wait for threads to terminate ...")
     
     # not called if window closed but self.thread still running
     def __del__(self):
@@ -116,6 +115,12 @@ class Player(object):
             os.system("sudo shutdown -h now")
         else:
             msg("shutdown works only on raspi")
+    
+    def callback_close(self):
+        self.action_stop()
+        self._stop_thread = True
+        self.root.destroy()
+        msg("wait for threads to terminate ...")
     
     def insert_metadata_txt(self, txt):
         self.text.delete(1.0, END)
