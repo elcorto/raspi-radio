@@ -11,6 +11,9 @@
     {"name": "soma groove",
      "url":  "http://ice.somafm.com/groovesalad"
     },
+    {"name": "soma secret agent",
+     "url":  "http://ice.somafm.com/secretagent"
+    },
     {"name": "fm4",
      "url":  "http://mp3stream1.apasf.apa.at:8000/"
     },

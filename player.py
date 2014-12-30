@@ -1,14 +1,14 @@
 #!/usr/bin/python
 
 import os, json, tkFont, socket, subprocess, threading, time, types, \
-    signal, re, sys, shlex, multiprocessing
+    signal, re, sys, shlex
 import Queue as queue
 from Tkinter import TOP, BOTTOM, LEFT, RIGHT, SINGLE, END, X, Y, BOTH, \
     INSERT, Button, Scrollbar, Listbox, Tk, Text
 pj = os.path.join
 
-here = os.path.dirname(__file__)
-
+HERE = os.path.dirname(__file__)
+CONF = pj(os.environ['HOME'], '.raspi-radio')
 
 def msg(txt):
     print "[raspi-radio] %s" %txt
@@ -18,60 +18,20 @@ def dbg(txt):
     print "DEBUG [raspi-radio] %s" %txt
     ##pass
 
+def trim(line):
+    ret = line[:(COLUMNS-3)]
+    if len(line.strip()) > COLUMNS:
+        return  ret + '...'
+    else:
+        return ret
 
 def exit(msg):
     raise StandardError(msg)
     sys.exit(1)
 
 
-##class ShellCommand(object):
-##    """Run shell command in a thread, possibly with timeout."""
-##
-##    def __init__(self, cmd, verbose=False):
-##        self.cmd = cmd
-##        self.stdout = None
-##        self.stderr = None
-##        self.verbose = verbose
-##
-##    def run(self, timeout=None):
-##        thread = threading.Thread(target=self.target)
-##        dbg("ShellCommand: start thread for: '%s'" %self.cmd)
-##        thread.start()
-##        if timeout is not None:
-##            thread.join(timeout)
-##            if thread.is_alive():
-##                dbg("ShellCommand: proc terminate")
-##                self.proc.terminate()
-##                dbg("ShellCommand: os terminate")
-##                os.killpg(self.proc.pid, signal.SIGTERM)
-##                dbg("ShellCommand: join")
-##                thread.join()
-##            time.sleep(1)    
-##            assert not thread.is_alive(), "ShellCommand: error: thread still alive"    
-##            dbg("ShellCommand: retcode: %i" %self.proc.returncode)
-##        else:  
-##            if self.verbose:
-##                for txt in [self.stdout, self.stderr]:
-##                    if txt is not None:
-##                        print txt
-##
-##    def target(self):
-##        self.proc = subprocess.Popen(shlex.split(self.cmd), stdout=subprocess.PIPE,
-##                                     stderr=subprocess.STDOUT,
-##                                     shell=False, preexec_fn=os.setsid,
-##                                     bufsize=0,
-##                                     universal_newlines=True,close_fds=True) 
-##        self.stdout, self.stderr = self.proc.communicate()
-##
-##
-##def backtick(cmd, timeout):
-##    sc = ShellCommand(cmd)
-##    sc.run(timeout)
-##    return sc.stdout
-
-
 def backtick(cmd, timeout):
-    cmd = r"./timeout.sh {} {}".format(timeout, cmd)
+    cmd = r"{}/timeout.sh {} {}".format(HERE, timeout, cmd)
     proc = subprocess.Popen(shlex.split(cmd), 
                             stdout=subprocess.PIPE,
                             stderr=subprocess.STDOUT)
@@ -88,6 +48,9 @@ class Player(object):
         # poll for new stream metadata after that many seconds,
         # _mplayer_poll_timeout should be smaller, such as 5 seconds or so
         self._fill_metadata_sleep = 15
+        
+        # let mplayer run this many seconds to obtain stream name or metadata
+        self._mplayer_poll_timeout = 15
 
         self._stop_thread = False
         self._have_all_stream_names = False
@@ -126,14 +89,14 @@ class Player(object):
         text = Text(root, height=1)
         
         scrollbar = Scrollbar(root, width=30)
-        font = tkFont.Font(size=15)
+        font = tkFont.Font(size=FONTSIZE)
         listbox = Listbox(root, 
                           yscrollcommand=scrollbar.set,
                           selectmode=SINGLE,
                           font=font)
         listbox.bind("<<ListboxSelect>>", self.callback_listbox)
         for idx,url in enumerate(self.stream_urls):
-            listbox.insert(idx, url)
+            listbox.insert(idx, trim(url))
         scrollbar.config(command=listbox.yview)
         
         button_stop.place(relx=0, rely=0)
@@ -148,6 +111,7 @@ class Player(object):
         self.root = root
         self.listbox = listbox
         root.protocol("WM_DELETE_WINDOW", self.callback_close)
+        
        
         self.queue = queue.LifoQueue()
         
@@ -158,8 +122,9 @@ class Player(object):
         self.stream_names_thread = threading.Thread(target=self.fill_stream_names)
         self.stream_names_thread.start()
         self.root.after(self._poll_sleep_ms, self.poll_stream_names)
-    
+        
         self.play_last()
+    
 
     def play_last(self):
         self.action_load_last_stream() 
@@ -255,18 +220,20 @@ class Player(object):
             dbg("fill_stream_names: start thread for stream idx: %i" %idx)
             thread = threading.Thread(target=func_put_name, args=(idx,))
             thread.start()
+            time.sleep(self._stream_name_sleep)
         
-        cnt = 0
+        cnt = -1
         while True:
             cnt += 1
-            if cnt == 10:
+            if cnt == int(self._mplayer_poll_timeout*5):
+                dbg("fill_stream_names: while loop: break b/c count timed out")
                 break
 
             if not have_all_names():
                 dbg("fill_stream_names: while loop: wait ....")
                 time.sleep(1)
             else:
-                dbg("fill_stream_names: while loop: break")
+                dbg("fill_stream_names: while loop: break b/c have_all_names")
                 self._have_all_stream_names = True
                 break
         
@@ -277,7 +244,8 @@ class Player(object):
             if self.streams[idx].has_key('name'):
                 self.root.after_idle(self.insert_stream_name_txt, idx)
         if self._have_all_stream_names:
-            self.highlight_selected_stream()
+            dbg("poll_stream_names: highlight_selected_stream")
+            self.root.after_idle(self.highlight_selected_stream)
         else:    
             self.root.after(self._poll_sleep_ms, self.poll_stream_names)
     
@@ -286,7 +254,7 @@ class Player(object):
         if txt != '':
             dbg("insert_stream_name_txt: insert loop: idx: %i" %idx)
             self.listbox.delete(idx)
-            self.listbox.insert(idx, txt)
+            self.listbox.insert(idx, trim(txt))
 
     def action_load_last_stream(self):
         if os.path.exists(self._fn_last_stream):
@@ -294,8 +262,6 @@ class Player(object):
 
 
 class Mplayer(object):
-    _mplayer_poll_timeout = 5
-    
     def action_stop(self):
         os.system("killall mplayer")
     
@@ -328,8 +294,9 @@ class Mplayer(object):
 
  
 class JsonPlayer(Player, Mplayer):
-    _fn_last_stream = pj(here, 'last_stream.json')
-    
+    _fn_last_stream = pj(CONF, 'last_stream.json')
+    _stream_name_sleep = 0
+
     @staticmethod
     def _tolist(x):
         if isinstance(x, types.DictType):
@@ -337,7 +304,7 @@ class JsonPlayer(Player, Mplayer):
         else:
             return x
 
-    def load_streams(self, fn=pj(here, 'streams.json')):
+    def load_streams(self, fn=pj(CONF, 'streams.json')):
         assert os.path.exists(fn), "error: file %s not found" %fn 
         with open(fn) as fd:
             streams = self._tolist(json.load(fd))
@@ -354,9 +321,10 @@ class JsonPlayer(Player, Mplayer):
     
 
 class M3UPlayer(Player, Mplayer):
-    _fn_last_stream = pj(here, 'last_stream.m3u')
+    _fn_last_stream = pj(CONF, 'last_stream.m3u')
+    _stream_name_sleep = 1
 
-    def load_streams(self, fn=pj(here, 'streams.m3u')):
+    def load_streams(self, fn=pj(CONF, 'streams.m3u')):
         assert os.path.exists(fn), "error: file %s not found" %fn 
         with open(fn) as fd:
             streams = [{'url': x} for x in [z.strip() for z in \
@@ -373,7 +341,9 @@ if __name__ == '__main__':
     
     root = Tk()
     root.geometry("320x210")
+    FONTSIZE = 15
+    COLUMNS = 26
     root.wm_title("raspi radio")
-##    p = JsonPlayer(root)
-    p = M3UPlayer(root)
+    p = JsonPlayer(root)
+##    p = M3UPlayer(root)
     root.mainloop()
