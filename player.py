@@ -1,6 +1,7 @@
 #!/usr/bin/python
 
-import os, json, tkFont, socket, subprocess, threading, time, types
+import os, json, tkFont, socket, subprocess, threading, time, types, \
+    signal, re, sys, shlex, multiprocessing
 import Queue as queue
 from Tkinter import TOP, BOTTOM, LEFT, RIGHT, SINGLE, END, X, Y, BOTH, \
     INSERT, Button, Scrollbar, Listbox, Tk, Text
@@ -8,18 +9,88 @@ pj = os.path.join
 
 here = os.path.dirname(__file__)
 
+
 def msg(txt):
     print "[raspi-radio] %s" %txt
+
 
 def dbg(txt):
     print "DEBUG [raspi-radio] %s" %txt
     ##pass
 
+
+def exit(msg):
+    raise StandardError(msg)
+    sys.exit(1)
+
+
+##class ShellCommand(object):
+##    """Run shell command in a thread, possibly with timeout."""
+##
+##    def __init__(self, cmd, verbose=False):
+##        self.cmd = cmd
+##        self.stdout = None
+##        self.stderr = None
+##        self.verbose = verbose
+##
+##    def run(self, timeout=None):
+##        thread = threading.Thread(target=self.target)
+##        dbg("ShellCommand: start thread for: '%s'" %self.cmd)
+##        thread.start()
+##        if timeout is not None:
+##            thread.join(timeout)
+##            if thread.is_alive():
+##                dbg("ShellCommand: proc terminate")
+##                self.proc.terminate()
+##                dbg("ShellCommand: os terminate")
+##                os.killpg(self.proc.pid, signal.SIGTERM)
+##                dbg("ShellCommand: join")
+##                thread.join()
+##            time.sleep(1)    
+##            assert not thread.is_alive(), "ShellCommand: error: thread still alive"    
+##            dbg("ShellCommand: retcode: %i" %self.proc.returncode)
+##        else:  
+##            if self.verbose:
+##                for txt in [self.stdout, self.stderr]:
+##                    if txt is not None:
+##                        print txt
+##
+##    def target(self):
+##        self.proc = subprocess.Popen(shlex.split(self.cmd), stdout=subprocess.PIPE,
+##                                     stderr=subprocess.STDOUT,
+##                                     shell=False, preexec_fn=os.setsid,
+##                                     bufsize=0,
+##                                     universal_newlines=True,close_fds=True) 
+##        self.stdout, self.stderr = self.proc.communicate()
+##
+##
+##def backtick(cmd, timeout):
+##    sc = ShellCommand(cmd)
+##    sc.run(timeout)
+##    return sc.stdout
+
+
+def backtick(cmd, timeout):
+    cmd = r"./timeout.sh {} {}".format(timeout, cmd)
+    proc = subprocess.Popen(shlex.split(cmd), 
+                            stdout=subprocess.PIPE,
+                            stderr=subprocess.STDOUT)
+    stdout, stderr = proc.communicate()
+    return stdout
+
+
 class Player(object):
     def __init__(self, root):
-        self._polltime_s = 1
-        self._polltime_ms = int(self._polltime_s * 1000)
+        # time interval for queue polling loops
+        self._poll_sleep_s = 1 # seconds
+        self._poll_sleep_ms = int(self._poll_sleep_s * 1000)
+        
+        # poll for new stream metadata after that many seconds,
+        # _mplayer_poll_timeout should be smaller, such as 5 seconds or so
+        self._fill_metadata_sleep = 15
+
         self._stop_thread = False
+        self._have_all_stream_names = False
         self.selected_stream = None
         
         # json player:
@@ -35,7 +106,6 @@ class Player(object):
         self.streams = self.load_streams()
         self.stream_urls = [stream['url'] for stream in self.streams]
 
-        self.queue = queue.LifoQueue()
 
         button_play = Button(root, 
                              text="Play", 
@@ -79,17 +149,19 @@ class Player(object):
         self.listbox = listbox
         root.protocol("WM_DELETE_WINDOW", self.callback_close)
        
-        # thread which starts nstreams sub-threads for getting the stream name
-        self.stream_names_thread = threading.Thread(target=self.set_stream_names)
-        self.stream_names_thread.start()
-
-        # start metadata thread which fills metadata queue self.queue
-        self.selected_stream_metadata_thread = threading.Thread(target=self.selected_stream_metadata_into_queue)
-        self.selected_stream_metadata_thread.start()
-
-        # start polling loop with recursive self.poll_selected_stream_metadata_queue()
-        self.root.after(self._polltime_ms, self.poll_selected_stream_metadata_queue)
+        self.queue = queue.LifoQueue()
         
+        self.selected_stream_metadata_thread = threading.Thread(target=self.fill_queue_selected_stream_metadata)
+        self.selected_stream_metadata_thread.start()
+        self.root.after(self._poll_sleep_ms, self.poll_queue_selected_stream_metadata)
+        
+        self.stream_names_thread = threading.Thread(target=self.fill_stream_names)
+        self.stream_names_thread.start()
+        self.root.after(self._poll_sleep_ms, self.poll_stream_names)
+    
+        self.play_last()
+
+    def play_last(self):
         self.action_load_last_stream() 
         if self.selected_stream is not None:
             self.callback_play()
@@ -132,29 +204,27 @@ class Player(object):
         self.text.delete(1.0, END)
         self.text.insert(END, txt)
 
-    def poll_selected_stream_metadata_queue(self):
+    def fill_queue_selected_stream_metadata(self):
+        while True:
+            if self._stop_thread:
+                break
+            txt = self.get_selected_stream_metadata()
+            dbg("    fill_queue_selected_stream_metadata: txt: %s" %txt)
+            self.queue.put(txt)
+            time.sleep(self._fill_metadata_sleep)
+
+    def poll_queue_selected_stream_metadata(self):
         oldtxt = ''
-        dbg("poll_selected_stream_metadata_queue .... start")
         while True:
             try:
                 txt = self.queue.get(block=False, timeout=1)
-                dbg("    poll_selected_stream_metadata_queue .... txt: %s" %txt)
+                dbg("    poll_queue_selected_stream_metadata: txt: %s" %txt)
                 if txt != oldtxt:
                     self.root.after_idle(self.insert_metadata_txt, txt)
                 oldtxt = txt
             except queue.Empty:
                 break
-        self.root.after(self._polltime_ms, self.poll_selected_stream_metadata_queue)
-
-    def selected_stream_metadata_into_queue(self):
-        dbg("selected_stream_metadata_into_queue .... start")
-        while True:
-            if self._stop_thread:
-                break
-            txt = self.get_selected_stream_metadata()
-            dbg("    selected_stream_metadata_into_queue .... txt: %s" %txt)
-            self.queue.put(txt)
-            time.sleep(self._poll_sleep)
+        self.root.after(self._poll_sleep_ms, self.poll_queue_selected_stream_metadata)
 
     def highlight_selected_stream(self):
         if self.selected_stream is not None:
@@ -162,9 +232,12 @@ class Player(object):
             self.listbox.selection_set(idx)
             self.listbox.see(idx)
     
-    def set_stream_names(self):
+    def fill_stream_names(self):
+        dbg("fill_stream_names: start")
         nstreams = len(self.stream_urls)
-        def func_get(idx):
+        
+        def func_put_name(idx):
+            dbg("func_put_name: idx: %i" %idx)
             stream = self.streams[idx]
             if not stream.has_key('name'):
                 stream['name'] = self.get_stream_name(idx)
@@ -172,34 +245,48 @@ class Player(object):
         def have_all_names():
             names = [stream['name'] for stream in self.streams if \
                 stream.has_key('name')]
-            dbg("check: names: %s" %str(names))  
+            dbg("fill_stream_names: check: names: %s" %str(names))  
             if len(names) == nstreams:
                 return True
             else:
                 return False
         
         for idx in range(len(self.stream_urls)):
-            dbg("start thread for: %i" %idx)
-            thread = threading.Thread(target=func_get, args=(idx,))
+            dbg("fill_stream_names: start thread for stream idx: %i" %idx)
+            thread = threading.Thread(target=func_put_name, args=(idx,))
             thread.start()
         
+        cnt = 0
         while True:
+            cnt += 1
+            if cnt == 10:
+                break
+
             if not have_all_names():
-                dbg("set_stream_names: while loop: wait ....")
+                dbg("fill_stream_names: while loop: wait ....")
                 time.sleep(1)
             else:
-                dbg("set_stream_names: while loop: break")
+                dbg("fill_stream_names: while loop: break")
+                self._have_all_stream_names = True
                 break
         
-        # update listbox after we have all stream names
+        dbg("fill_stream_names: end")
+
+    def poll_stream_names(self):
         for idx,stream in enumerate(self.streams):
-            dbg("set_stream_names: insert loop: idx: %i" %idx)
-            name = self.streams[idx]['name']
-            if name != '':
-                self.listbox.delete(idx)
-                self.listbox.insert(idx, name)
-        
-        self.highlight_selected_stream()
+            if self.streams[idx].has_key('name'):
+                self.root.after_idle(self.insert_stream_name_txt, idx)
+        if self._have_all_stream_names:
+            self.highlight_selected_stream()
+        else:    
+            self.root.after(self._poll_sleep_ms, self.poll_stream_names)
+    
+    def insert_stream_name_txt(self, idx):
+        txt = self.streams[idx]['name']
+        if txt != '':
+            dbg("insert_stream_name_txt: insert loop: idx: %i" %idx)
+            self.listbox.delete(idx)
+            self.listbox.insert(idx, txt)
 
     def action_load_last_stream(self):
         if os.path.exists(self._fn_last_stream):
@@ -207,26 +294,41 @@ class Player(object):
 
 
 class Mplayer(object):
+    _mplayer_poll_timeout = 5
+    
     def action_stop(self):
         os.system("killall mplayer")
     
     def action_play(self):
-        os.system(r"mplayer -cache 300 %s &" %self.selected_stream['url'])
-    
+        os.system(r"mplayer --quiet --cache=300 %s &" %self.selected_stream['url'])
+
     def get_selected_stream_metadata(self):
         if self.selected_stream is None:
             return ''
         else:    
-            cmd = r"timeout %i mplayer --ao=null %s 2>&1 \
-                | sed -nre 's/.*StreamTitle='\''(.[^;]*)'\'';*.*/\1/p' &" \
-                    %(self._mplayer_poll_timeout, self.selected_stream['url'])
-            return subprocess.check_output(cmd, shell=True)
+            cmd = r"mplayer --quiet --vo=null --ao=null %s" %self.selected_stream['url']
+            txt = backtick(cmd, self._mplayer_poll_timeout)
+            match = re.search(r".*StreamTitle='(.*?)';*.*", txt, re.M)
+            if match is None:
+                msg("match is None for selected stream: %s" %self.selected_stream['url'])
+                return ''
+            else:    
+                return match.group(1)                             
     
+    def get_stream_name(self, idx):
+        dbg("get_stream_name: url: %s" %self.streams[idx]['url'])
+        cmd = r"mplayer --quiet --vo=null --ao=null %s" %self.streams[idx]['url']
+        txt = backtick(cmd, self._mplayer_poll_timeout)
+        match = re.search(r'^\s*Name\s*:\s*(.*)$', txt, re.M)
+        if match is None: 
+            msg("match is None for stream: %s" %self.streams[idx]['url'])
+            return ''
+        else:    
+            return match.group(1)                             
+
  
 class JsonPlayer(Player, Mplayer):
     _fn_last_stream = pj(here, 'last_stream.json')
-    _mplayer_poll_timeout = 5
-    _poll_sleep = 15
     
     @staticmethod
     def _tolist(x):
@@ -253,8 +355,6 @@ class JsonPlayer(Player, Mplayer):
 
 class M3UPlayer(Player, Mplayer):
     _fn_last_stream = pj(here, 'last_stream.m3u')
-    _mplayer_poll_timeout = 5
-    _poll_sleep = 15
 
     def load_streams(self, fn=pj(here, 'streams.m3u')):
         assert os.path.exists(fn), "error: file %s not found" %fn 
@@ -269,14 +369,6 @@ class M3UPlayer(Player, Mplayer):
         with open(self._fn_last_stream, 'w') as fd:
             fd.write(self.selected_stream['url'] + '\n')
     
-    def get_stream_name(self, idx):
-        dbg("get_stream_name: url: %s" %self.streams[idx]['url'])
-        cmd = r"timeout %i mplayer --ao=null %s 2>&1 \
-            | sed -nre 's/^Name\s*:\s*(.*)$/\1/p' &" \
-                %(self._mplayer_poll_timeout, self.streams[idx]['url'])
-        return subprocess.check_output(cmd, shell=True).strip()
-
-
 if __name__ == '__main__':
     
     root = Tk()
