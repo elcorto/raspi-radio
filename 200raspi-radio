@@ -2,4 +2,4 @@
 # Make sure it is one of the last scripts called (e.g. rename 200raspi-radio to
 # 250raspi-radio if needed).
 
-sudo -u pi /home/pi/raspi-radio/start.sh &
+sudo -u pi /home/pi/raspi-radio/start.sh --format json &

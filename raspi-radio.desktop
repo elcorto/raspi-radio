@@ -1,6 +1,6 @@
 [Desktop Entry]
 Encoding=UTF-8
 Name=raspi-radio
-Exec=/home/pi/raspi-radio/start.sh
+Exec=/home/pi/raspi-radio/start.sh --format json
 Icon=icon-raspi-radio-white
 Type=Application

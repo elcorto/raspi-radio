@@ -1,7 +1,7 @@
 #!/usr/bin/python
 
 import os, json, tkFont, socket, subprocess, threading, time, types, \
-    signal, re, sys, shlex
+    signal, re, sys, shlex, argparse
 import Queue as queue
 from Tkinter import TOP, BOTTOM, LEFT, RIGHT, SINGLE, END, X, Y, BOTH, \
     INSERT, Button, Scrollbar, Listbox, Tk, Text
@@ -339,11 +339,20 @@ class M3UPlayer(Player, Mplayer):
     
 if __name__ == '__main__':
     
+    parser = argparse.ArgumentParser(description='raspi radio')
+    parser.add_argument('-f', '--format', help="playlist format [json,m3u]",
+                        default='json')
+    args = parser.parse_args()
+
     root = Tk()
     root.geometry("320x210")
     FONTSIZE = 15
     COLUMNS = 26
     root.wm_title("raspi radio")
-    p = JsonPlayer(root)
-##    p = M3UPlayer(root)
+    if args.format == 'json':
+        p = JsonPlayer(root)
+    elif args.format == 'm3u':
+        p = M3UPlayer(root)
+    else:
+        raise StandardError("unknown playlist format")
     root.mainloop()
