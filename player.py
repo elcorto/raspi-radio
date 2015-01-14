@@ -30,30 +30,37 @@ def exit(msg):
     sys.exit(1)
 
 
-def backtick(cmd, timeout):
-    cmd = r"{}/timeout.sh {} {}".format(HERE, timeout, cmd)
-    proc = subprocess.Popen(shlex.split(cmd), 
+def backtick(cmd, timeout=None, shell=False):
+    if timeout is not None:
+        cmd = r"{}/timeout.sh {} {}".format(HERE, timeout, cmd)
+    if not shell:
+        cmd = shlex.split(cmd)
+    proc = subprocess.Popen(cmd, 
                             stdout=subprocess.PIPE,
-                            stderr=subprocess.STDOUT)
+                            stderr=subprocess.STDOUT,
+                            shell=shell)
     stdout, stderr = proc.communicate()
     return stdout
 
 
 class Player(object):
+    """Player base class."""
     def __init__(self, root):
         # time interval for queue polling loops
         self._poll_sleep_s = 1 # seconds
         self._poll_sleep_ms = int(self._poll_sleep_s * 1000)
         
-        # poll for new stream metadata after that many seconds,
-        # _mplayer_poll_timeout should be smaller, such as 5 seconds or so
-        self._fill_metadata_sleep = 15
-        
-        # let mplayer run this many seconds to obtain stream name or metadata
-        self._mplayer_poll_timeout = 15
+        # In fill_queue_selected_stream_metadata(), the metadata queue
+        # (self.queue) with the currently selected stream metadata (artist,
+        # title) is updated every _fill_metadata_sleep + _mplayer_poll_timeout
+        # seconds usually, if get_selected_stream_metadata() uses mplayer with
+        # _mplayer_poll_timeout. This is for example not the case for
+        # MPDPlayerM3U, which just uses a call to "mpc current".
+        self._fill_metadata_sleep = 5
+        self._mplayer_poll_timeout = 5
 
         self._stop_thread = False
-        self._have_all_stream_names = False
+        self._stop_poll_stream_names = False
         self.selected_stream = None
         
         # json player:
@@ -112,7 +119,6 @@ class Player(object):
         self.listbox = listbox
         root.protocol("WM_DELETE_WINDOW", self.callback_close)
         
-       
         self.queue = queue.LifoQueue()
         
         self.selected_stream_metadata_thread = threading.Thread(target=self.fill_queue_selected_stream_metadata)
@@ -179,7 +185,7 @@ class Player(object):
             time.sleep(self._fill_metadata_sleep)
 
     def poll_queue_selected_stream_metadata(self):
-        oldtxt = ''
+        oldtxt = ' '
         while True:
             try:
                 txt = self.queue.get(block=False, timeout=1)
@@ -227,6 +233,7 @@ class Player(object):
             cnt += 1
             if cnt == int(self._mplayer_poll_timeout*5):
                 dbg("fill_stream_names: while loop: break b/c count timed out")
+                self._stop_poll_stream_names = True
                 break
 
             if not have_all_names():
@@ -234,7 +241,7 @@ class Player(object):
                 time.sleep(1)
             else:
                 dbg("fill_stream_names: while loop: break b/c have_all_names")
-                self._have_all_stream_names = True
+                self._stop_poll_stream_names = True
                 break
         
         dbg("fill_stream_names: end")
@@ -243,7 +250,7 @@ class Player(object):
         for idx,stream in enumerate(self.streams):
             if self.streams[idx].has_key('name'):
                 self.root.after_idle(self.insert_stream_name_txt, idx)
-        if self._have_all_stream_names:
+        if self._stop_poll_stream_names:
             dbg("poll_stream_names: highlight_selected_stream")
             self.root.after_idle(self.highlight_selected_stream)
         else:    
@@ -260,6 +267,8 @@ class Player(object):
         if os.path.exists(self._fn_last_stream):
             self.selected_stream = self.load_streams(fn=self._fn_last_stream)[0]
 
+
+# player application base classes
 
 class Mplayer(object):
     def action_stop(self):
@@ -284,7 +293,7 @@ class Mplayer(object):
     def get_stream_name(self, idx):
         dbg("get_stream_name: url: %s" %self.streams[idx]['url'])
         cmd = r"mplayer --quiet --vo=null --ao=null %s" %self.streams[idx]['url']
-        txt = backtick(cmd, self._mplayer_poll_timeout)
+        txt = backtick(cmd, self._mplayer_poll_timeout*3)
         match = re.search(r'^\s*Name\s*:\s*(.*)$', txt, re.M)
         if match is None: 
             msg("match is None for stream: %s" %self.streams[idx]['url'])
@@ -292,8 +301,28 @@ class Mplayer(object):
         else:    
             return match.group(1)                             
 
- 
-class JsonPlayer(Player, Mplayer):
+
+class MPDPlayer(object):
+    def action_stop(self):
+        os.system("mpc stop")
+    
+    def action_play(self):
+        idx = self.stream_urls.index(self.selected_stream['url']) + 1
+        dbg("MPDPlayer.action_play: idx+1: %i" %idx)
+        os.system(r"mpc play %i" %idx)
+
+    def get_selected_stream_metadata(self):
+        dbg("MPDPlayer: get_selected_stream_metadata: start")
+        cmd = r"mpc current"
+        txt = backtick(cmd, shell=True)
+        ret = txt.split(':')[-1].strip()                         
+        dbg("MPDPlayer: get_selected_stream_metadata: end")
+        return ret 
+
+
+# actual player classes which are used in __main__
+
+class MplayerJson(Player, Mplayer):
     _fn_last_stream = pj(CONF, 'last_stream.json')
     _stream_name_sleep = 0
 
@@ -320,10 +349,10 @@ class JsonPlayer(Player, Mplayer):
         return self.streams[idx]['name']
     
 
-class M3UPlayer(Player, Mplayer):
+class MplayerM3U(Player, Mplayer):
     _fn_last_stream = pj(CONF, 'last_stream.m3u')
-    _stream_name_sleep = 1
-
+    _stream_name_sleep = .5
+    
     def load_streams(self, fn=pj(CONF, 'streams.m3u')):
         assert os.path.exists(fn), "error: file %s not found" %fn 
         with open(fn) as fd:
@@ -336,12 +365,26 @@ class M3UPlayer(Player, Mplayer):
         # dict -> dict
         with open(self._fn_last_stream, 'w') as fd:
             fd.write(self.selected_stream['url'] + '\n')
-    
+
+
+class MPDPlayerM3U(MPDPlayer, MplayerM3U):
+    def __init__(self, *args, **kwds):
+        self._stream_name_sleep = 0
+        super(MPDPlayerM3U, self).__init__(*args, **kwds)
+        self._fill_metadata_sleep = 2
+     
+    def load_streams(self, *args, **kwds):
+        streams = super(MPDPlayerM3U, self).load_streams(*args, **kwds)
+        os.system("mpc clear; mpc load streams")
+        return streams
+
 if __name__ == '__main__':
     
     parser = argparse.ArgumentParser(description='raspi radio')
     parser.add_argument('-f', '--format', help="playlist format [json,m3u]",
                         default='json')
+    parser.add_argument('-p', '--player', help="player [mplayer,mpd]",
+                        default='mplayer')
     args = parser.parse_args()
 
     root = Tk()
@@ -349,10 +392,20 @@ if __name__ == '__main__':
     FONTSIZE = 15
     COLUMNS = 26
     root.wm_title("raspi radio")
-    if args.format == 'json':
-        p = JsonPlayer(root)
-    elif args.format == 'm3u':
-        p = M3UPlayer(root)
+    if args.player == 'mplayer':
+        if args.format == 'json':
+            p = MplayerJson(root)
+        elif args.format == 'm3u':
+            p = MplayerM3U(root)
+        else:
+            raise StandardError("unknown playlist format '%s'" %args.format)
+    elif args.player == 'mpd':
+        if args.format == 'json':
+            raise StandardError("player mpd + format json not implemented")
+        elif args.format == 'm3u':
+            p = MPDPlayerM3U(root)
+        else:
+            raise StandardError("unknown playlist format '%s'" %args.format)
     else:
-        raise StandardError("unknown playlist format")
+        raise StandardError("unknown player '%s'" %args.player)
     root.mainloop()
