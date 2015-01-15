@@ -46,8 +46,7 @@ that the next time. To extract stream URLs from downloaded m3u or pls files,
 just look into the files and copy the URLs to ``streams.json`` and define a
 stream name.
 
-You can also use a list of stream URLs in a playlist ``stream.m3u``, which is
-just a list of URLs::
+You can also use a list of stream URLs in a playlist file ``stream.m3u``::
          
          http://ice.somafm.com/u80s
          http://ice.somafm.com/groovesalad
@@ -148,4 +147,5 @@ We do ``mpc load streams``, which will load the playlist
 
 mpd is not the default b/c some streams are not played by mpd and we had no
 time to find out why .. see TODO.
+
 
