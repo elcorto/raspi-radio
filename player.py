@@ -51,18 +51,20 @@ class Player(object):
         self._poll_sleep_ms = int(self._poll_sleep_s * 1000)
         
         # In fill_queue_selected_stream_metadata(), the metadata queue
-        # (self.queue) with the currently selected stream metadata (artist,
+        # (self.metadata_queue) with the currently selected stream metadata (artist,
         # title) is updated every _fill_metadata_sleep + _mplayer_poll_timeout
         # seconds usually, if get_selected_stream_metadata() uses mplayer with
         # _mplayer_poll_timeout. This is for example not the case for
         # MPDPlayerM3U, which just uses a call to "mpc current".
         self._fill_metadata_sleep = 5
         self._mplayer_poll_timeout = 5
-
-        self._stop_thread = False
-        self._stop_poll_stream_names = False
-        self.selected_stream = None
         
+        self._flag_stop_all_threads = False
+        self._flag_stop_poll_stream_names = False
+        self._flag_is_polling_metadata = False
+        
+        self.selected_stream = None
+
         # json player:
         # [{'name': 'radio1', 'url': 'http://radio1...'},
         #  {'name': 'radio2', 'url': 'http://radio2...'},
@@ -75,8 +77,7 @@ class Player(object):
         #  ]
         self.streams = self.load_streams()
         self.stream_urls = [stream['url'] for stream in self.streams]
-
-
+        
         button_play = Button(root, 
                              text="Play", 
                              command=self.callback_play)
@@ -107,7 +108,7 @@ class Player(object):
         scrollbar.config(command=listbox.yview)
         
         button_stop.place(relx=0, rely=0)
-        button_play.place(relx=0.2, rely=0)
+        button_play.place(relx=0.18, rely=0)
         button_close.place(relx=0.5, rely=0)
         button_shutdown.place(relx=0.7, rely=0)
         scrollbar.place(relx=0.9, rely=0.2, relheight=0.7)
@@ -119,18 +120,49 @@ class Player(object):
         self.listbox = listbox
         root.protocol("WM_DELETE_WINDOW", self.callback_close)
         
-        self.queue = queue.LifoQueue()
-        
-        self.selected_stream_metadata_thread = threading.Thread(target=self.fill_queue_selected_stream_metadata)
-        self.selected_stream_metadata_thread.start()
-        self.root.after(self._poll_sleep_ms, self.poll_queue_selected_stream_metadata)
+        self.metadata_queue = queue.LifoQueue()
+
+        self.selected_stream_metadata_thread = None
+        self.stream_names_thread = None
+        self.threads = {}
         
         self.stream_names_thread = threading.Thread(target=self.fill_stream_names)
         self.stream_names_thread.start()
         self.root.after(self._poll_sleep_ms, self.poll_stream_names)
         
+        # start thread: see start_selected_stream_metadata_thread()
+        self.root.after(self._poll_sleep_ms, self.poll_queue_selected_stream_metadata)
+        
+        self.update_threads()
+        
         self.play_last()
     
+    def update_threads(self):
+        dbg('update_threads: start')
+        self.threads['selected_stream_metadata_thread'] = self.selected_stream_metadata_thread
+        self.threads['stream_names_thread'] = self.stream_names_thread
+        dbg('update_threads: end')
+
+    def wait_for_threads_to_die(self):
+        for name,thread in self.threads.iteritems():
+            dbg("wait_for_threads_to_die: test thread: %s" %name)
+            timeout = 1
+            passed = -timeout
+            while (thread is not None) and thread.is_alive():
+                passed += timeout
+                dbg("wait_for_threads_to_die: wait for thread: %s" %name)
+                time.sleep(timeout)
+                if int(passed) == int(self._mplayer_poll_timeout*2):
+                    raise StandardError("thread not finished: %s" %name)
+
+    def start_selected_stream_metadata_thread(self):
+        dbg("start_selected_stream_metadata_thread: starting")
+        if (self.selected_stream_metadata_thread is not None) and \
+                self.selected_stream_metadata_thread.is_alive():
+            exit("selected_stream_metadata_thread is alive")
+        self.selected_stream_metadata_thread = threading.Thread(target=self.fill_queue_selected_stream_metadata)
+        self.selected_stream_metadata_thread.start()
+        self.update_threads()
 
     def play_last(self):
         self.action_load_last_stream() 
@@ -139,19 +171,25 @@ class Player(object):
     
     # not called if window closed but self.selected_stream_metadata_thread still running
     def __del__(self):
-        self.action_stop()
-        self._stop_thread = True
+        self.callback_stop()
 
     def callback_stop(self):
         self.action_stop()
+        self._flag_stop_all_threads = True
+        self._flag_is_polling_metadata = False
+        self.wait_for_threads_to_die()
 
     def callback_play(self):
         self.action_stop()
         if self.selected_stream is None:
             msg("error: no stream")
-        else:    
+        else:   
             self.action_dump_last_stream()
+            self._flag_stop_all_threads = False
             self.action_play()
+            if not self._flag_is_polling_metadata:
+                self.start_selected_stream_metadata_thread()
+                self._flag_is_polling_metadata = True
 
     def callback_listbox(self, event):
         # tuple (1,) or ('1',) on raspi -> 1
@@ -166,10 +204,8 @@ class Player(object):
             msg("shutdown works only on raspi")
     
     def callback_close(self):
-        self.action_stop()
-        self._stop_thread = True
+        self.callback_stop()
         self.root.destroy()
-        msg("wait for threads to terminate ...")
     
     def insert_metadata_txt(self, txt):
         self.text.delete(1.0, END)
@@ -177,18 +213,18 @@ class Player(object):
 
     def fill_queue_selected_stream_metadata(self):
         while True:
-            if self._stop_thread:
+            if self._flag_stop_all_threads:
                 break
             txt = self.get_selected_stream_metadata()
             dbg("    fill_queue_selected_stream_metadata: txt: %s" %txt)
-            self.queue.put(txt)
+            self.metadata_queue.put(txt)
             time.sleep(self._fill_metadata_sleep)
 
     def poll_queue_selected_stream_metadata(self):
         oldtxt = ' '
         while True:
             try:
-                txt = self.queue.get(block=False, timeout=1)
+                txt = self.metadata_queue.get(block=False, timeout=1)
                 dbg("    poll_queue_selected_stream_metadata: txt: %s" %txt)
                 if txt != oldtxt:
                     self.root.after_idle(self.insert_metadata_txt, txt)
@@ -222,27 +258,28 @@ class Player(object):
             else:
                 return False
         
-        for idx in range(len(self.stream_urls)):
+        for idx in range(nstreams):
             dbg("fill_stream_names: start thread for stream idx: %i" %idx)
             thread = threading.Thread(target=func_put_name, args=(idx,))
             thread.start()
             time.sleep(self._stream_name_sleep)
         
-        cnt = -1
+        timeout = 1
+        passed = -timeout
         while True:
-            cnt += 1
-            if cnt == int(self._mplayer_poll_timeout*5):
+            passed += timeout
+            if passed == int(self._mplayer_poll_timeout*5):
                 dbg("fill_stream_names: while loop: break b/c count timed out")
-                self._stop_poll_stream_names = True
+                self._flag_stop_poll_stream_names = True
                 break
 
-            if not have_all_names():
-                dbg("fill_stream_names: while loop: wait ....")
-                time.sleep(1)
-            else:
+            if have_all_names():
                 dbg("fill_stream_names: while loop: break b/c have_all_names")
-                self._stop_poll_stream_names = True
+                self._flag_stop_poll_stream_names = True
                 break
+            else:
+                dbg("fill_stream_names: while loop: wait ....")
+                time.sleep(timeout)
         
         dbg("fill_stream_names: end")
 
@@ -250,7 +287,7 @@ class Player(object):
         for idx,stream in enumerate(self.streams):
             if self.streams[idx].has_key('name'):
                 self.root.after_idle(self.insert_stream_name_txt, idx)
-        if self._stop_poll_stream_names:
+        if self._flag_stop_poll_stream_names:
             dbg("poll_stream_names: highlight_selected_stream")
             self.root.after_idle(self.highlight_selected_stream)
         else:    
