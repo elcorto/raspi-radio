@@ -57,10 +57,12 @@ mpd
     Jan 06 14:58 : client: [368] closed
     Jan 06 14:58 : output: Failed to open mixer for 'My ALSA Device'
     Jan 06 14:58 : player: played "http://www.fluxfm.de/stream-berlin"
+
 * using pulseaudio instead as backend doesn't work either, the error is gone
   but it still doesn't play and jumps right to the next stream
 * may be an alsa <-> pulseaudio conflict since both are installed .. one grabbs
   the stream before the other can .. smth like that
+* or it is b/c the stream is aac-plus?
 * We also tested mopidy (www.mopidy.com) to replace mpd. mopidy is a music
   player server written in Python. It implements a subset of the mpd protocol.
   We can use any mpd client (like mpc) to run "mpc load/clear/play/stop/...".
