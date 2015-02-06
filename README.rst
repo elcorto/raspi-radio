@@ -5,11 +5,20 @@ About
 -----
 
 A very minimalistic Tkinter GUI for playing web radio streams. Ment to be used
-on a Raspberry Pi with touchscreen TFT display (like the `watterott
+on a Raspberry Pi with a touchscreen TFT display (like the `watterott
 <https://github.com/watterott/RPi-Display>`_ RPi display [that's what we use]
 or the `adafruit <http://www.adafruit.com/product/1601>`_ PiTFT display, both
 320x240), running Raspbian and an X server (no SDL/Pygame). Tkinter and LXDE on
 the Raspberry Pi model B+ don't use much resources, so that's OK.
+
+Here are two screenshots: a clean raspi desktop (left) and the raspi desktop
+with the fullscreen raspi-radio application (right).
+
+.. image:: screenshots/desktop.png
+   :width: 250px
+
+.. image:: screenshots/desktop_with_radio.png
+   :width: 250px
 
 There is no connection to icecast servers, so no search by genre etc. Also, we
 use ``mplayer`` for playing streams and we therefore don't need ``mpd`` and
@@ -88,8 +97,8 @@ we log in via ssh. We use an Xsession startup script::
 
 Install desktop icon if you wish::
 
-    pi@raspi ~/raspi-radio $ cp icon-raspi-radio-white.png ~/.icons/
-    pi@raspi ~/raspi-radio $ cp raspi-radio.desktop ~/Desktop/
+    pi@raspi ~/raspi-radio $ cp desktop/icon-raspi-radio-white.png ~/.icons/
+    pi@raspi ~/raspi-radio $ cp desktop/raspi-radio.desktop ~/Desktop/
 
 
 Usage
@@ -118,7 +127,7 @@ a white background (the original was transparent).
 Raspberry Pi install and setup
 ==============================
 
-Download Raspbian image from https://github.com/watterott/RPi-Display, then
+Download the Raspbian image from https://github.com/watterott/RPi-Display, then
 flash onto the sd card which you will put into the raspi later::
     
     sudo dd if=2014-06-20-wheezy-raspbian-2014-07-25-fbtft-rpi-display-rev2.img of=/dev/mmcblk0
@@ -147,7 +156,8 @@ Wifi (http://raspberry.eickwinkel.com/wlan.html)::
 
 Install (i) some stuff. Purge (p) unused stuff, delete (d) pre-installed stuff::
 
-    [i] install vim mercurial mplayer2 ntp
+    [i] vim mercurial mplayer2 ntp
+    
     [p] wolfram-engine idle idle3 mpd cups-bsd cups-common
         cups-clientcups-bsd cups-common cups-client nfs-common
         debian-reference-common debian-reference-en esound-common nano
@@ -164,7 +174,7 @@ Fix time zone::
 Disable TFT blank
 (https://github.com/notro/fbtft-spindle/wiki/FBTFT-image#console)::
     
-    [m] etc/kbd/config
+    [m] /etc/kbd/config
     BLANK_TIME=0
 
 Disable screensaver::
@@ -223,7 +233,7 @@ that to ``mpd`` by ::
     cat streams.m3u | xargs -l mpc add # very slow with mopidy
 
 or copy it to ``/var/lib/mpd/playlists/`` (``/var/lib/mopidy/playlists/`` in
-case the ``mpd`` server is ``mopidy`` instead of ``mpd``) and then say::
+case the MPD server is ``mopidy`` instead of ``mpd``) and then say::
     
     [mpc update ??]
     mpc load streams

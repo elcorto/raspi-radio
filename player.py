@@ -145,15 +145,15 @@ class Player(object):
 
     def wait_for_threads_to_die(self):
         for name,thread in self.threads.iteritems():
-            dbg("wait_for_threads_to_die: test thread: %s" %name)
             timeout = 1
             passed = -timeout
             while (thread is not None) and thread.is_alive():
                 passed += timeout
-                dbg("wait_for_threads_to_die: wait for thread: %s" %name)
+                dbg("wait_for_threads_to_die: %s" %name)
                 time.sleep(timeout)
                 if int(passed) == int(self._mplayer_poll_timeout*2):
-                    raise StandardError("thread not finished: %s" %name)
+                    ##raise StandardError("thread not finished: %s" %name)
+                    exit("thread not finished: %s" %name)
 
     def start_selected_stream_metadata_thread(self):
         dbg("start_selected_stream_metadata_thread: starting")
