@@ -56,7 +56,7 @@ class Player(object):
         # In fill_queue_playing_stream_metadata(), the metadata queue
         # (self.metadata_queue) with the currently selected stream metadata (artist,
         # title) is updated every _fill_metadata_sleep seconds.
-        self._fill_metadata_sleep = 5
+        self._fill_metadata_sleep = 2
         
         # timeout for all polling commands and threads
         self._poll_timeout = 5
@@ -310,6 +310,11 @@ class Player(object):
 
 class Mplayer(object):
     _fn_mplayer_stdout = pj(CONF, 'mplayer_stdout')
+    old_mtime = -0.0
+    old_meta = ''
+
+    def get_mtime(self):
+        return os.stat(self._fn_mplayer_stdout).st_mtime
 
     def action_stop(self):
         os.system("killall mplayer")
@@ -318,20 +323,33 @@ class Mplayer(object):
         os.system(r"rm -f {out}; mplayer --quiet --cache=300 {url} > {out} & "
             "".format(out=self._fn_mplayer_stdout,
                       url=self.selected_stream['url']))
-
+                       
     def get_playing_stream_metadata(self):
         if not os.path.exists(self._fn_mplayer_stdout):
             dbg("%s not found, no stream info" %self._fn_mplayer_stdout)
             return ''
         else:
-            with open(self._fn_mplayer_stdout) as fd:
-                lst = re.findall(r".*StreamTitle='(.*?)';*.*", fd.read(), re.M)
-                if lst == []:
-                    msg("no stream name in %s" %self._fn_mplayer_stdout)
-                    return ''
-                else:    
-                    dbg("stream info: %s" %lst[-1])
-                    return lst[-1]                           
+            # Checking for the last modification time makes sense if we use
+            # "mplayer --quiet ...". Then, it writes new stdout only when the
+            # stream changes the track and prints a new line "StreamTitle=...".
+            # W/o --quiet, mplayer is rather chatty and prints some stream
+            # progess info.
+            mtime = self.get_mtime()
+            dbg("old mtime: %s, mtime: %s" %(self.old_mtime, mtime))
+            if mtime > self.old_mtime:   
+                dbg("new mtime")
+                with open(self._fn_mplayer_stdout) as fd:
+                    lst = re.findall(r".*StreamTitle='(.*?)';*.*", fd.read(), re.M)
+                    if lst == []:
+                        msg("no stream name in %s" %self._fn_mplayer_stdout)
+                        return ''
+                    else:    
+                        dbg("stream info: %s" %lst[-1])
+                        self.old_mtime = self.get_mtime()
+                        self.old_meta = lst[-1]
+                        return self.old_meta
+            else:
+                return self.old_meta
     
     def get_stream_name(self, idx):
         dbg("get_stream_name: url: %s" %self.streams[idx]['url'])

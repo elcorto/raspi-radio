@@ -4,21 +4,14 @@ raspi-radio
 About
 -----
 
-A very minimalistic Tkinter GUI for playing web radio streams. Ment to be used
+A very minimalistic Tkinter GUI for playing web radio streams. Meant to be used
 on a Raspberry Pi with a touchscreen TFT display (like the `watterott
 <https://github.com/watterott/RPi-Display>`_ RPi display [that's what we use]
 or the `adafruit <http://www.adafruit.com/product/1601>`_ PiTFT display, both
 320x240), running Raspbian and an X server (no SDL/Pygame). Tkinter and LXDE on
 the Raspberry Pi model B+ don't use much resources, so that's OK.
 
-Here are two screenshots: a clean raspi desktop (left) and the raspi desktop
-with the fullscreen raspi-radio application (right).
-
-.. image:: screenshots/desktop.png
-   :width: 250px
-
-.. image:: screenshots/desktop_with_radio.png
-   :width: 250px
+See ``screenshots/`` for some images.
 
 There is no connection to icecast servers, so no search by genre etc. Also, we
 use ``mplayer`` for playing streams and we therefore don't need ``mpd`` and
@@ -86,7 +79,7 @@ Install
 
 Copy all files to the raspi::
     
-    [me@mybox ~/.../hg/raspi-radio]$ scp * raspi:raspi-radio/
+    [me@mybox ~/.../hg/raspi-radio]$ scp -r * raspi:raspi-radio/
     [me@mybox ~/.../hg/raspi-radio]$ scp ~/.raspi-radio/streams* raspi:.raspi-radio/
 
 On the raspi, make sure that the radio starts up when X comes up, but not when
@@ -292,16 +285,7 @@ from ffmpeg or something) cannot play AAC-plus streams, for example. That's why
 ``mopidy`` is the better ``mpd`` server.
 
 There are many Android clients as well, so we can switch stations playing on
-the raspi with our phone. There are two advantages:
-
-* change station with phone [but this is no real use case] 
-* ``mpc current`` is pretty fast, so we can get stream metadata whith much
-  less effort compared to using ``mplayer`` [that is the only real plus] 
-
-But that's about it. In raspi-radio, ``mpd`` can be used instead of
-``mplayer`` (``./player.py --player mpd``), but is not the default b/c 
-
-* ``mpd`` doesn't play all streams (probably aac-plus, see TODO file)
-* we didn't care to install ``mopidy`` on the raspi yet, since the ``mplayer`` approach
-  to stream metadata is good enough for now
-
+the raspi with e.g. with our phone or another comouter, but this is no real use
+case here. The other point is that ``mpc current`` is pretty fast for obtaining
+stream metadata, but out current mplayer approach is also fast enough and low
+on resources. Also, with mplayer we have less dependencies.
