@@ -53,14 +53,13 @@ class Player(object):
         self._poll_sleep_s = 1 # seconds
         self._poll_sleep_ms = int(self._poll_sleep_s * 1000)
         
-        # In fill_queue_selected_stream_metadata(), the metadata queue
+        # In fill_queue_playing_stream_metadata(), the metadata queue
         # (self.metadata_queue) with the currently selected stream metadata (artist,
-        # title) is updated every _fill_metadata_sleep + _mplayer_poll_timeout
-        # seconds usually, if get_selected_stream_metadata() uses mplayer with
-        # _mplayer_poll_timeout. This is for example not the case for
-        # MPDPlayerM3U, which just uses a call to "mpc current".
+        # title) is updated every _fill_metadata_sleep seconds.
         self._fill_metadata_sleep = 5
-        self._mplayer_poll_timeout = 5
+        
+        # timeout for all polling commands and threads
+        self._poll_timeout = 5
         
         self._flag_stop_all_threads = False
         self._flag_stop_poll_stream_names = False
@@ -125,7 +124,7 @@ class Player(object):
         
         self.metadata_queue = queue.LifoQueue()
 
-        self.selected_stream_metadata_thread = None
+        self.playing_stream_metadata_thread = None
         self.stream_names_thread = None
         self.threads = {}
         
@@ -133,8 +132,8 @@ class Player(object):
         self.stream_names_thread.start()
         self.root.after(self._poll_sleep_ms, self.poll_stream_names)
         
-        # start thread: see start_selected_stream_metadata_thread()
-        self.root.after(self._poll_sleep_ms, self.poll_queue_selected_stream_metadata)
+        # start thread: see start_playing_stream_metadata_thread()
+        self.root.after(self._poll_sleep_ms, self.poll_queue_playing_stream_metadata)
         
         self.update_threads()
         
@@ -142,7 +141,7 @@ class Player(object):
     
     def update_threads(self):
         dbg('update_threads: start')
-        self.threads['selected_stream_metadata_thread'] = self.selected_stream_metadata_thread
+        self.threads['playing_stream_metadata_thread'] = self.playing_stream_metadata_thread
         self.threads['stream_names_thread'] = self.stream_names_thread
         dbg('update_threads: end')
 
@@ -154,17 +153,16 @@ class Player(object):
                 passed += timeout
                 dbg("wait_for_threads_to_die: %s" %name)
                 time.sleep(timeout)
-                if int(passed) == int(self._mplayer_poll_timeout*2):
-                    ##raise StandardError("thread not finished: %s" %name)
+                if int(passed) == int(self._poll_timeout*2):
                     exit("thread not finished: %s" %name)
 
-    def start_selected_stream_metadata_thread(self):
-        dbg("start_selected_stream_metadata_thread: starting")
-        if (self.selected_stream_metadata_thread is not None) and \
-                self.selected_stream_metadata_thread.is_alive():
-            exit("selected_stream_metadata_thread is alive")
-        self.selected_stream_metadata_thread = threading.Thread(target=self.fill_queue_selected_stream_metadata)
-        self.selected_stream_metadata_thread.start()
+    def start_playing_stream_metadata_thread(self):
+        dbg("start_playing_stream_metadata_thread: starting")
+        if (self.playing_stream_metadata_thread is not None) and \
+                self.playing_stream_metadata_thread.is_alive():
+            exit("playing_stream_metadata_thread is alive")
+        self.playing_stream_metadata_thread = threading.Thread(target=self.fill_queue_playing_stream_metadata)
+        self.playing_stream_metadata_thread.start()
         self.update_threads()
 
     def play_last(self):
@@ -172,7 +170,7 @@ class Player(object):
         if self.selected_stream is not None:
             self.callback_play()
     
-    # not called if window closed but self.selected_stream_metadata_thread still running
+    # not called if window closed but self.playing_stream_metadata_thread still running
     def __del__(self):
         self.callback_stop()
 
@@ -191,7 +189,7 @@ class Player(object):
             self._flag_stop_all_threads = False
             self.action_play()
             if not self._flag_is_polling_metadata:
-                self.start_selected_stream_metadata_thread()
+                self.start_playing_stream_metadata_thread()
                 self._flag_is_polling_metadata = True
 
     def callback_listbox(self, event):
@@ -214,27 +212,27 @@ class Player(object):
         self.text.delete(1.0, END)
         self.text.insert(END, txt)
 
-    def fill_queue_selected_stream_metadata(self):
+    def fill_queue_playing_stream_metadata(self):
         while True:
             if self._flag_stop_all_threads:
                 break
-            txt = self.get_selected_stream_metadata()
-            dbg("    fill_queue_selected_stream_metadata: txt: %s" %txt)
+            txt = self.get_playing_stream_metadata()
+            dbg("    fill_queue_playing_stream_metadata: txt: %s" %txt)
             self.metadata_queue.put(txt)
             time.sleep(self._fill_metadata_sleep)
 
-    def poll_queue_selected_stream_metadata(self):
+    def poll_queue_playing_stream_metadata(self):
         oldtxt = ' '
         while True:
             try:
                 txt = self.metadata_queue.get(block=False, timeout=1)
-                dbg("    poll_queue_selected_stream_metadata: txt: %s" %txt)
+                dbg("    poll_queue_playing_stream_metadata: txt: %s" %txt)
                 if txt != oldtxt:
                     self.root.after_idle(self.insert_metadata_txt, txt)
                 oldtxt = txt
             except queue.Empty:
                 break
-        self.root.after(self._poll_sleep_ms, self.poll_queue_selected_stream_metadata)
+        self.root.after(self._poll_sleep_ms, self.poll_queue_playing_stream_metadata)
 
     def highlight_selected_stream(self):
         if self.selected_stream is not None:
@@ -271,7 +269,7 @@ class Player(object):
         passed = -timeout
         while True:
             passed += timeout
-            if passed == int(self._mplayer_poll_timeout*5):
+            if passed == int(self._poll_timeout*5):
                 dbg("fill_stream_names: while loop: break b/c count timed out")
                 self._flag_stop_poll_stream_names = True
                 break
@@ -321,7 +319,7 @@ class Mplayer(object):
             "".format(out=self._fn_mplayer_stdout,
                       url=self.selected_stream['url']))
 
-    def get_selected_stream_metadata(self):
+    def get_playing_stream_metadata(self):
         if not os.path.exists(self._fn_mplayer_stdout):
             dbg("%s not found, no stream info" %self._fn_mplayer_stdout)
             return ''
@@ -338,7 +336,7 @@ class Mplayer(object):
     def get_stream_name(self, idx):
         dbg("get_stream_name: url: %s" %self.streams[idx]['url'])
         cmd = r"mplayer --quiet --vo=null --ao=null %s" %self.streams[idx]['url']
-        txt = backtick(cmd, self._mplayer_poll_timeout*3)
+        txt = backtick(cmd, self._poll_timeout*3)
         match = re.search(r'^\s*Name\s*:\s*(.*)$', txt, re.M)
         if match is None: 
             msg("match is None for stream: %s" %self.streams[idx]['url'])
@@ -356,12 +354,12 @@ class MPDPlayer(object):
         dbg("MPDPlayer.action_play: idx+1: %i" %idx)
         os.system(r"mpc play %i" %idx)
 
-    def get_selected_stream_metadata(self):
-        dbg("MPDPlayer: get_selected_stream_metadata: start")
+    def get_playing_stream_metadata(self):
+        dbg("MPDPlayer: get_playing_stream_metadata: start")
         cmd = r"mpc current"
         txt = backtick(cmd, shell=True)
         ret = txt.split(':')[-1].strip()                         
-        dbg("MPDPlayer: get_selected_stream_metadata: end")
+        dbg("MPDPlayer: get_playing_stream_metadata: end")
         return ret 
 
 
