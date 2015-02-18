@@ -20,20 +20,6 @@ raspi
   The "10" in the display comes from "X11DisplayOffset 10" in
   /etc/ssh/sshd_config.  
 
-player
-------
-* Find smarter way to implement get_selected_stream_metadata(),
-  for mplayer-based player classes. Right now we use smth like::
-      
-      ./timeout.sh 5 mplayer --ao=null <stream> | sed ...
-  
-  which is pretty brute force. Maybe smth with curl and getting only the stream
-  http header? We already use ``mpc current`` when using mpd instead of
-  mplayer.
-* We should fetch metadata from the current `playing` stream, not the selected
-  one. If we poke around on the touch screen, the selected stream may change,
-  and without pressing Play, the playing stream remains the same.
-
 playlist
 --------
 * Find a way to let users modify the playlist ``raspi:.raspi-radio/streams.*``
@@ -73,9 +59,6 @@ mpd
 
 Using mpd (mopidy) over mplayer has some advantages:
 
-* A call to ``mpc current`` is cheap and so we can implement
-  get_selected_stream_metadata() without mplayer. Also we can poll much more
-  often (like every 2 seconds).
 * We can steer the playback from any computer / phone with an mpd client.
   See https://docs.mopidy.com/en/latest/clients/mpd/#mpd-clients or
   http://www.musicpd.org/clients/.

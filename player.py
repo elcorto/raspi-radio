@@ -9,14 +9,17 @@ pj = os.path.join
 
 HERE = os.path.dirname(__file__)
 CONF = pj(os.environ['HOME'], '.raspi-radio')
+VERBOSE = False
 
 def msg(txt):
     print "[raspi-radio] %s" %txt
 
 
 def dbg(txt):
-    print "DEBUG [raspi-radio] %s" %txt
-    ##pass
+    if VERBOSE:
+        print "DEBUG [raspi-radio] %s" %txt
+    else:
+        pass
 
 def trim(line):
     ret = line[:(COLUMNS-3)]
@@ -308,24 +311,29 @@ class Player(object):
 # player application base classes
 
 class Mplayer(object):
+    _fn_mplayer_stdout = pj(CONF, 'mplayer_stdout')
+
     def action_stop(self):
         os.system("killall mplayer")
     
     def action_play(self):
-        os.system(r"mplayer --quiet --cache=300 %s &" %self.selected_stream['url'])
+        os.system(r"rm -f {out}; mplayer --quiet --cache=300 {url} > {out} & "
+            "".format(out=self._fn_mplayer_stdout,
+                      url=self.selected_stream['url']))
 
     def get_selected_stream_metadata(self):
-        if self.selected_stream is None:
+        if not os.path.exists(self._fn_mplayer_stdout):
+            dbg("%s not found, no stream info" %self._fn_mplayer_stdout)
             return ''
-        else:    
-            cmd = r"mplayer --quiet --vo=null --ao=null %s" %self.selected_stream['url']
-            txt = backtick(cmd, self._mplayer_poll_timeout)
-            match = re.search(r".*StreamTitle='(.*?)';*.*", txt, re.M)
-            if match is None:
-                msg("match is None for selected stream: %s" %self.selected_stream['url'])
-                return ''
-            else:    
-                return match.group(1)                             
+        else:
+            with open(self._fn_mplayer_stdout) as fd:
+                lst = re.findall(r".*StreamTitle='(.*?)';*.*", fd.read(), re.M)
+                if lst == []:
+                    msg("no stream name in %s" %self._fn_mplayer_stdout)
+                    return ''
+                else:    
+                    dbg("stream info: %s" %lst[-1])
+                    return lst[-1]                           
     
     def get_stream_name(self, idx):
         dbg("get_stream_name: url: %s" %self.streams[idx]['url'])
@@ -422,6 +430,8 @@ if __name__ == '__main__':
                         default='json')
     parser.add_argument('-p', '--player', help="player [mplayer,mpd]",
                         default='mplayer')
+    parser.add_argument('-v', '--verbose', help="verbose debug output",
+                        action='store_true', default=False)
     args = parser.parse_args()
 
     root = Tk()
@@ -445,4 +455,6 @@ if __name__ == '__main__':
             raise StandardError("unknown playlist format '%s'" %args.format)
     else:
         raise StandardError("unknown player '%s'" %args.player)
+    if args.verbose:
+        VERBOSE = True
     root.mainloop()
