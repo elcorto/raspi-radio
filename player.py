@@ -317,16 +317,22 @@ class Mplayer(object):
         return os.stat(self._fn_mplayer_stdout).st_mtime
 
     def action_stop(self):
-        os.system("killall mplayer")
+        os.system("killall -q mplayer")
     
     def action_play(self):
-        os.system(r"rm -f {out}; mplayer --quiet --cache=300 {url} > {out} & "
-            "".format(out=self._fn_mplayer_stdout,
-                      url=self.selected_stream['url']))
+        cmd = r"rm -f {out}; mplayer --quiet --cache=300 {url}" 
+        if VERBOSE:
+            cmd += " 2>&1 | tee -a {out} &"
+        else:
+            cmd += " > {out} 2>&1 & "
+        cmd = cmd.format(out=self._fn_mplayer_stdout,
+                             url=self.selected_stream['url'])
+        dbg("mplayer cmd: %s" %cmd)
+        os.system(cmd)
                        
     def get_playing_stream_metadata(self):
         if not os.path.exists(self._fn_mplayer_stdout):
-            dbg("%s not found, no stream info" %self._fn_mplayer_stdout)
+            dbg("%s not found, no stream metadata" %self._fn_mplayer_stdout)
             return ''
         else:
             # Checking for the last modification time makes sense if we use
@@ -341,7 +347,7 @@ class Mplayer(object):
                 with open(self._fn_mplayer_stdout) as fd:
                     lst = re.findall(r".*StreamTitle='(.*?)';*.*", fd.read(), re.M)
                     if lst == []:
-                        msg("no stream name in %s" %self._fn_mplayer_stdout)
+                        dbg("no stream metadata in %s" %self._fn_mplayer_stdout)
                         return ''
                     else:    
                         dbg("stream info: %s" %lst[-1])
@@ -455,6 +461,8 @@ if __name__ == '__main__':
     FONTSIZE = 15
     COLUMNS = 26
     root.wm_title("raspi radio")
+    if args.verbose:
+        VERBOSE = True
     if args.player == 'mplayer':
         if args.format == 'json':
             p = MplayerJson(root)
@@ -471,6 +479,4 @@ if __name__ == '__main__':
             raise StandardError("unknown playlist format '%s'" %args.format)
     else:
         raise StandardError("unknown player '%s'" %args.player)
-    if args.verbose:
-        VERBOSE = True
     root.mainloop()

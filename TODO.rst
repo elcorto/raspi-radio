@@ -20,6 +20,21 @@ raspi
   The "10" in the display comes from "X11DisplayOffset 10" in
   /etc/ssh/sshd_config.  
 
+player
+------
+* In fill_queue_playing_stream_metadata(), we constantly keep putting the stream
+  metadata into metadata_queue, even if it doesn't change (same track playing).
+  In poll_queue_playing_stream_metadata(), we poll that every 2 seconds or so
+  but at least we don't update the GUI if the text is the same. But can't we
+  just put a new string into metadata_queue if there *is* a new one (e.g. new
+  track)? Then we need a push-like mechanism, where we inform
+  poll_queue_playing_stream_metadata() of the availability of new metadata.
+  This constant put and poll with the queue seems pretty stuipd, even if it
+  doesn't cost much. If a push-like mechanism is not possible and we need the
+  polling, then at least put nothing in the queue if the metadata doesn't
+  change. poll_queue_playing_stream_metadata() sould only do something if there
+  is smth new (or anything at all) in metadata_queue.
+
 playlist
 --------
 * Find a way to let users modify the playlist ``raspi:.raspi-radio/streams.*``
