@@ -320,7 +320,7 @@ class Mplayer(object):
         os.system("killall -q mplayer")
     
     def action_play(self):
-        cmd = r"rm -f {out}; mplayer --quiet --cache=300 {url}" 
+        cmd = r"rm -f {out}; mplayer --quiet --cache=400 {url}" 
         if VERBOSE:
             cmd += " 2>&1 | tee -a {out} &"
         else:

@@ -34,6 +34,18 @@ player
   polling, then at least put nothing in the queue if the metadata doesn't
   change. poll_queue_playing_stream_metadata() sould only do something if there
   is smth new (or anything at all) in metadata_queue.
+* Make config file (in ~/.raspi-radio) to read hard-coded mplayer settings like
+  cache size etc, or expose a cmd line for that. Or: pass any additional
+  options directly to mplayer -- but that means we must know that we use
+  mplayer. What do we do in case of mpd being the player? So a config file may
+  be better, like so::
+    
+    [mplayer]
+    cache=400
+
+    [mpd]
+    ...
+
 
 playlist
 --------
