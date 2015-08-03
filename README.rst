@@ -105,7 +105,8 @@ Usage
     ./player.py --format m3u --player mplayer
     ./player.py --format m3u --player mpd
 
-See also ``player.py -h`` and ``start.sh`` for how to actually use it.
+See also ``player.py -h``, ``start.sh`` and ``200raspi-radio`` for how to actually use 
+it, including automatic start after boot.
 
 
 Thanks
