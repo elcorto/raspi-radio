@@ -72,11 +72,6 @@ class Player(object):
         #  {'name': 'radio2', 'url': 'http://radio2...'},
         #  ...
         #  ]
-        # m3u player:
-        # [{'url': 'http://radio1...'},
-        #  {'url': 'http://radio2...'},
-        #  ...
-        #  ]
         self.streams = self.load_streams()
         self.stream_urls = [stream['url'] for stream in self.streams]
         
@@ -104,7 +99,7 @@ class Player(object):
                           yscrollcommand=scrollbar.set,
                           selectmode=SINGLE,
                           font=font)
-        listbox.bind("<<ListboxSelect>>", self.callback_listbox)
+        listbox.bind("<<ListboxSelect>>", self.callback_stream_selected)
         for idx,url in enumerate(self.stream_urls):
             listbox.insert(idx, trim(url))
         scrollbar.config(command=listbox.yview)
@@ -192,7 +187,7 @@ class Player(object):
                 self.start_playing_stream_metadata_thread()
                 self._flag_is_polling_metadata = True
 
-    def callback_listbox(self, event):
+    def callback_stream_selected(self, event):
         # tuple (1,) or ('1',) on raspi -> 1
         stream_idx = int(event.widget.curselection()[0])
         msg("stream_idx: %i" %stream_idx)
@@ -208,7 +203,7 @@ class Player(object):
         self.callback_stop()
         self.root.destroy()
     
-    def insert_metadata_txt(self, txt):
+    def show_txt_in_text_field(self, txt):
         self.text.delete(1.0, END)
         self.text.insert(END, txt)
 
@@ -228,7 +223,7 @@ class Player(object):
                 txt = self.metadata_queue.get(block=False, timeout=1)
                 dbg("    poll_queue_playing_stream_metadata: txt: %s" %txt)
                 if txt != oldtxt:
-                    self.root.after_idle(self.insert_metadata_txt, txt)
+                    self.root.after_idle(self.show_txt_in_text_field, txt)
                 oldtxt = txt
             except queue.Empty:
                 break
@@ -263,7 +258,6 @@ class Player(object):
             dbg("fill_stream_names: start thread for stream idx: %i" %idx)
             thread = threading.Thread(target=func_put_name, args=(idx,))
             thread.start()
-            time.sleep(self._stream_name_sleep)
         
         timeout = 1
         passed = -timeout
@@ -358,11 +352,8 @@ class Mplayer(object):
                 return self.old_meta
     
 
-# actual player classes which are used in __main__
-
 class MplayerJson(Player, Mplayer):
     _fn_last_stream = pj(CONF, 'last_stream.json')
-    _stream_name_sleep = 0
 
     @staticmethod
     def _tolist(x):
