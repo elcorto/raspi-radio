@@ -326,7 +326,7 @@ class Mplayer(object):
         else:
             cmd += " > {out} 2>&1 & "
         cmd = cmd.format(out=self._fn_mplayer_stdout,
-                             url=self.selected_stream['url'])
+                         url=self.selected_stream['url'])
         dbg("mplayer cmd: %s" %cmd)
         os.system(cmd)
                        
@@ -357,17 +357,6 @@ class Mplayer(object):
             else:
                 return self.old_meta
     
-    def get_stream_name(self, idx):
-        dbg("get_stream_name: url: %s" %self.streams[idx]['url'])
-        cmd = r"mplayer --quiet --vo=null --ao=null %s" %self.streams[idx]['url']
-        txt = backtick(cmd, self._poll_timeout*3)
-        match = re.search(r'^\s*Name\s*:\s*(.*)$', txt, re.M)
-        if match is None: 
-            msg("match is None for stream: %s" %self.streams[idx]['url'])
-            return ''
-        else:    
-            return match.group(1)                             
-
 
 # actual player classes which are used in __main__
 
@@ -398,29 +387,9 @@ class MplayerJson(Player, Mplayer):
         return self.streams[idx]['name']
     
 
-class MplayerM3U(Player, Mplayer):
-    _fn_last_stream = pj(CONF, 'last_stream.m3u')
-    _stream_name_sleep = .5
-    
-    def load_streams(self, fn=pj(CONF, 'streams.m3u')):
-        assert os.path.exists(fn), "error: file %s not found" %fn 
-        with open(fn) as fd:
-            streams = [{'url': x} for x in [z.strip() for z in \
-                       fd.readlines()] if not x.startswith('#')]
-        return streams
-
-    def action_dump_last_stream(self):
-        # None -> 'null'
-        # dict -> dict
-        with open(self._fn_last_stream, 'w') as fd:
-            fd.write(self.selected_stream['url'] + '\n')
-
-
 if __name__ == '__main__':
     
     parser = argparse.ArgumentParser(description='raspi radio')
-    parser.add_argument('-f', '--format', help="playlist format [json,m3u]",
-                        default='json')
     parser.add_argument('-v', '--verbose', help="verbose debug output",
                         action='store_true', default=False)
     args = parser.parse_args()
@@ -432,10 +401,5 @@ if __name__ == '__main__':
     root.wm_title("raspi radio")
     if args.verbose:
         VERBOSE = True
-    if args.format == 'json':
-        p = MplayerJson(root)
-    elif args.format == 'm3u':
-        p = MplayerM3U(root)
-    else:
-        raise StandardError("unknown playlist format '%s'" %args.format)
+    p = MplayerJson(root)
     root.mainloop()
