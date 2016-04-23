@@ -62,7 +62,6 @@ class Player(object):
         self._poll_timeout = 5
         
         self._flag_stop_all_threads = False
-        self._flag_stop_poll_stream_names = False
         self._flag_is_polling_metadata = False
         
         self.selected_stream = None
@@ -120,24 +119,19 @@ class Player(object):
         self.metadata_queue = queue.LifoQueue()
 
         self.playing_stream_metadata_thread = None
-        self.stream_names_thread = None
         self.threads = {}
-        
-        self.stream_names_thread = threading.Thread(target=self.fill_stream_names)
-        self.stream_names_thread.start()
-        self.root.after(self._poll_sleep_ms, self.poll_stream_names)
         
         # start thread: see start_playing_stream_metadata_thread()
         self.root.after(self._poll_sleep_ms, self.poll_queue_playing_stream_metadata)
         
         self.update_threads()
         
+        self.display_stream_names()
         self.play_last()
     
     def update_threads(self):
         dbg('update_threads: start')
         self.threads['playing_stream_metadata_thread'] = self.playing_stream_metadata_thread
-        self.threads['stream_names_thread'] = self.stream_names_thread
         dbg('update_threads: end')
 
     def wait_for_threads_to_die(self):
@@ -235,58 +229,11 @@ class Player(object):
             self.listbox.selection_set(idx)
             self.listbox.see(idx)
     
-    def fill_stream_names(self):
-        dbg("fill_stream_names: start")
-        nstreams = len(self.stream_urls)
-        
-        def func_put_name(idx):
-            dbg("func_put_name: idx: %i" %idx)
-            stream = self.streams[idx]
-            if not stream.has_key('name'):
-                stream['name'] = self.get_stream_name(idx)
-        
-        def have_all_names():
-            names = [stream['name'] for stream in self.streams if \
-                stream.has_key('name')]
-            dbg("fill_stream_names: check: names: %s" %str(names))  
-            if len(names) == nstreams:
-                return True
-            else:
-                return False
-        
-        for idx in range(nstreams):
-            dbg("fill_stream_names: start thread for stream idx: %i" %idx)
-            thread = threading.Thread(target=func_put_name, args=(idx,))
-            thread.start()
-        
-        timeout = 1
-        passed = -timeout
-        while True:
-            passed += timeout
-            if passed == int(self._poll_timeout*5):
-                dbg("fill_stream_names: while loop: break b/c count timed out")
-                self._flag_stop_poll_stream_names = True
-                break
-
-            if have_all_names():
-                dbg("fill_stream_names: while loop: break b/c have_all_names")
-                self._flag_stop_poll_stream_names = True
-                break
-            else:
-                dbg("fill_stream_names: while loop: wait ....")
-                time.sleep(timeout)
-        
-        dbg("fill_stream_names: end")
-
-    def poll_stream_names(self):
+    def display_stream_names(self):
         for idx,stream in enumerate(self.streams):
             if self.streams[idx].has_key('name'):
                 self.root.after_idle(self.insert_stream_name_txt, idx)
-        if self._flag_stop_poll_stream_names:
-            dbg("poll_stream_names: highlight_selected_stream")
-            self.root.after_idle(self.highlight_selected_stream)
-        else:    
-            self.root.after(self._poll_sleep_ms, self.poll_stream_names)
+        self.root.after_idle(self.highlight_selected_stream)
     
     def insert_stream_name_txt(self, idx):
         txt = self.streams[idx]['name']
@@ -366,6 +313,9 @@ class MplayerJson(Player, Mplayer):
         assert os.path.exists(fn), "error: file %s not found" %fn 
         with open(fn) as fd:
             streams = self._tolist(json.load(fd))
+            for idx,stream in enumerate(streams):
+                if not stream.has_key('name'):
+                    stream['name'] = self.get_stream_name(idx)
         return streams
 
     def action_dump_last_stream(self):
