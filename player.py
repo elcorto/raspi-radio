@@ -369,24 +369,6 @@ class Mplayer(object):
             return match.group(1)                             
 
 
-class MPDPlayer(object):
-    def action_stop(self):
-        os.system("mpc stop")
-    
-    def action_play(self):
-        idx = self.stream_urls.index(self.selected_stream['url']) + 1
-        dbg("MPDPlayer.action_play: idx+1: %i" %idx)
-        os.system(r"mpc play %i" %idx)
-
-    def get_playing_stream_metadata(self):
-        dbg("MPDPlayer: get_playing_stream_metadata: start")
-        cmd = r"mpc current"
-        txt = backtick(cmd, shell=True)
-        ret = txt.split(':')[-1].strip()                         
-        dbg("MPDPlayer: get_playing_stream_metadata: end")
-        return ret 
-
-
 # actual player classes which are used in __main__
 
 class MplayerJson(Player, Mplayer):
@@ -434,24 +416,11 @@ class MplayerM3U(Player, Mplayer):
             fd.write(self.selected_stream['url'] + '\n')
 
 
-class MPDPlayerM3U(MPDPlayer, MplayerM3U):
-    def __init__(self, *args, **kwds):
-        self._stream_name_sleep = 0
-        super(MPDPlayerM3U, self).__init__(*args, **kwds)
-        self._fill_metadata_sleep = 2
-     
-    def load_streams(self, *args, **kwds):
-        streams = super(MPDPlayerM3U, self).load_streams(*args, **kwds)
-        os.system("mpc clear; mpc load streams")
-        return streams
-
 if __name__ == '__main__':
     
     parser = argparse.ArgumentParser(description='raspi radio')
     parser.add_argument('-f', '--format', help="playlist format [json,m3u]",
                         default='json')
-    parser.add_argument('-p', '--player', help="player [mplayer,mpd]",
-                        default='mplayer')
     parser.add_argument('-v', '--verbose', help="verbose debug output",
                         action='store_true', default=False)
     args = parser.parse_args()
@@ -463,20 +432,10 @@ if __name__ == '__main__':
     root.wm_title("raspi radio")
     if args.verbose:
         VERBOSE = True
-    if args.player == 'mplayer':
-        if args.format == 'json':
-            p = MplayerJson(root)
-        elif args.format == 'm3u':
-            p = MplayerM3U(root)
-        else:
-            raise StandardError("unknown playlist format '%s'" %args.format)
-    elif args.player == 'mpd':
-        if args.format == 'json':
-            raise StandardError("player mpd + format json not implemented")
-        elif args.format == 'm3u':
-            p = MPDPlayerM3U(root)
-        else:
-            raise StandardError("unknown playlist format '%s'" %args.format)
+    if args.format == 'json':
+        p = MplayerJson(root)
+    elif args.format == 'm3u':
+        p = MplayerM3U(root)
     else:
-        raise StandardError("unknown player '%s'" %args.player)
+        raise StandardError("unknown playlist format '%s'" %args.format)
     root.mainloop()
