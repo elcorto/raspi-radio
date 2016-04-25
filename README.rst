@@ -17,28 +17,21 @@ There is no connection to icecast servers, so no search by genre etc. Also, we
 use ``mplayer`` for playing streams and we therefore don't need ``mpd`` and
 ``mpc`` (but see below).
 
+Start the radio with::
+
+    ./player.py
+
 
 Streams
 -------
 
-In the config directory
+The default playlist is 
 
 ::
     
-    ~/.raspi-radio/
+    ~/.raspi-radio/streams.json
 
-streams are defined in plain text files. We support a custom file format based
-on json and m3u playlists.
-
-In case of json (the default)
-
-::
-    
-    ./player.py
-    ./player.py --format json --player mplayer 
-
-define streams in a file ``streams.json`` (a playlist), which is a list of
-dictionaries::
+which looks like this::
 
     [
         {"name": "soma 80s", 
@@ -49,38 +42,15 @@ dictionaries::
     ]      
     
 We store the last played stream in ``last_stream.json`` and automatically start
-that the next time. To extract stream URLs from downloaded m3u or pls files,
-just look into the files and copy the URLs to ``streams.json`` and define a
-stream name.
-
-You can also use a list of stream URLs in a playlist file ``stream.m3u``::
-         
-         http://ice.somafm.com/u80s
-         http://ice.somafm.com/groovesalad
-         ...
-
-Use
-
-::
-    
-    ./player.py --format m3u
-
-in that case.
-
-If a m3u playlist is used, we try to obtain the stream name metadata from
-``mplayer``'s output (just like we get the current track title). This leads to
-slower startup times on the raspi. First, the stream URL is displayed and some
-seconds later the obtained stream name. With json, startup is much faster but
-you need to define the stream name yourself at first in ``streams.json``.
-
+that the next time. 
 
 Install
 -------
 
 Copy all files to the raspi::
     
-    [me@mybox ~/.../hg/raspi-radio]$ scp -r * raspi:raspi-radio/
-    [me@mybox ~/.../hg/raspi-radio]$ scp ~/.raspi-radio/streams* raspi:.raspi-radio/
+    [me@mybox ~/.../git/raspi-radio]$ scp -r * raspi:raspi-radio/
+    [me@mybox ~/.../git/raspi-radio]$ scp ~/.raspi-radio/streams* raspi:.raspi-radio/
 
 On the raspi, make sure that the radio starts up when X comes up, but not when
 we log in via ssh. We use an Xsession startup script::
@@ -98,12 +68,7 @@ Usage
 -----
 ::
 
-    ./player.py --format json --player mplayer
-
-(the default) or::    
-    
-    ./player.py --format m3u --player mplayer
-    ./player.py --format m3u --player mpd
+    ./player.py
 
 See also ``player.py -h``, ``start.sh`` and ``200raspi-radio`` for how to actually use 
 it, including automatic start after boot.
@@ -126,7 +91,7 @@ flash onto the sd card which you will put into the raspi later::
     
     sudo dd if=2014-06-20-wheezy-raspbian-2014-07-25-fbtft-rpi-display-rev2.img of=/dev/mmcblk0
 
-Connect to ethernet, boot and ::
+Connect to ethernet, boot and ssh into the raspi::
 
     ssh pi@192.168.1.104
 
@@ -183,110 +148,3 @@ Disable screensaver::
     +   @xset s off
     +   @xset -dpms
 
-
-mpd / mpc
-=========
-
-general info
-------------
-
-With MPD (music player daemon), we can have a [radio stream] playlist and
-control it with an ``mpd`` client (the most simple one is ``mpc``).
-
-Install the original ``mpd`` server:: 
-    
-    [i] mpd
-
-or ``mopidy`` (https://docs.mopidy.com/en/latest/installation/debian/#debian-install)::
-
-    wget -q -O - https://apt.mopidy.com/mopidy.gpg | sudo apt-key add -
-
-    [m] /etc/apt/sources.list
-    deb http://apt.mopidy.com/ stable main contrib non-free
-    deb-src http://apt.mopidy.com/ stable main contrib non-free
-
-    [i] mopidy gstreamer0.10-alsa gstreamer0.10-plugins-ugly
-        gstreamer0.10-plugins-bad mpc
-
-For both ``mpd`` and ``mopidy``, we can use the ``mpc`` command line client for testing
-stuff.
-
-Usage::
-
-    service mopidy restart # or service mpd restart
-    mpc update
-    mpc clear
-    mpc add http://ice.somafm.com/u80s
-    mpc add http://fluxfm.de/stream-berlin
-    mpc playlist
-    mpc play 1
-
-An m3u playlist is a simple textfile with one stream URL per line. We can feed
-that to ``mpd`` by ::
-    
-    cat streams.m3u | xargs -l mpc add # very slow with mopidy
-
-or copy it to ``/var/lib/mpd/playlists/`` (``/var/lib/mopidy/playlists/`` in
-case the MPD server is ``mopidy`` instead of ``mpd``) and then say::
-    
-    [mpc update ??]
-    mpc load streams
-
-which does ``mpc add`` for each stream. 
-
-
-run mpd as user process
------------------------
-
-It is better to set up ``mpd`` as a user process::
-    
-    sudo apt-get install mpd mpc
-    sudo update-rc.d mpd disable
-    mkdir ~/.mpd
-    touch ~/.mpd/{tag_cache,state,mpd.log,pid}
-
-Copy ``/etc/mpd.conf`` and adapt::
-    
-    cp /etc/mpd.conf ~/.mpd/
-    [m] ~/.mpd/mpf.conf
-    playlist_directory      "/home/pi/.raspi-radio"
-    db_file                 "/home/pi/.mpd/tag_cache"
-    log_file                "/home/pi/.mpd/mpd.log"
-    pid_file                "/home/pi/.mpd/pid"
-    state_file              "/home/pi/.mpd/state"
-    sticker_file            "/home/pi/.mpd/sticker.sql"
-
-The important part is that ``playlist_directory`` is ``/home/pi/.raspi-radio``.
-Start the daemon as user ``pi`` (maybe put in some init script)
-
-::
-
-    mpd
-
-and the player by
-
-::
-
-    ./player.py --format m3u --player mpd
-
-We do ``mpc load streams``, which will load the playlist
-``~/.raspi-radio/streams.m3u`` into ``mpd``.
-
-why use mpd or mopidy + mpc instead of mplayer, and why not?
-------------------------------------------------------------
-
-``mopidy`` is a Python MPD server and much more. It implements a subset of the ``mpd``
-protocol. We can use any ``mpd`` client (like ``mpc``) to run ``mpc
-load/clear/play/stop/...``. It uses gstreamer for playback. It feels somewhat
-sluggish compared to the original ``mpd`` written in C. No extensive tests on the
-raspi up to now. If we install all funny gstreamer plugins
-"gstreamer1.0-plugins-{good,bad,ugly}" then ``mopidy`` does also play all streams
-which we currently use, while ``mpd``'s player backend (I think aplay or ffplay
-from ffmpeg or something) cannot play AAC-plus streams, for example. That's why
-``mopidy`` is the better ``mpd`` server.
-
-There are many Android clients as well, so we can switch stations playing on
-the raspi with e.g. with our phone or another comouter, but this is no real use
-case here. The other point is that ``mpc current`` is pretty fast for obtaining
-stream metadata, but out current mplayer approach is also fast enough and low
-on resources. Also, with mplayer we have less dependencies.
