@@ -21,13 +21,6 @@ def dbg(txt):
     else:
         pass
 
-def trim(line):
-    ret = line[:(COLUMNS-3)]
-    if len(line.strip()) > COLUMNS:
-        return  ret + '...'
-    else:
-        return ret
-
 def exit(msg):
     raise StandardError(msg)
     sys.exit(1)
@@ -46,9 +39,79 @@ def backtick(cmd, timeout=None, shell=False):
     return stdout
 
 
-class Player(object):
-    """Player base class."""
+class TkView(object):
     def __init__(self, root):
+        self.root = root
+        self.columns = 26
+        
+        button_play = Button(self.root, 
+                             text="Play", 
+                             command=self.callback_play)
+        
+        button_stop = Button(self.root, 
+                             text="Stop", 
+                             command=self.callback_stop)
+
+        button_shutdown = Button(self.root, 
+                                 text="Shut down", 
+                                 command=self.callback_shutdown)
+
+        button_close = Button(self.root, 
+                              text="Close", 
+                              command=self.callback_close)
+
+        self.text = Text(self.root, height=1)
+        
+        scrollbar = Scrollbar(self.root, width=30)
+        font = tkFont.Font(size=15)
+        self.listbox = Listbox(self.root, 
+                               yscrollcommand=scrollbar.set,
+                               selectmode=SINGLE,
+                               font=font)
+        self.listbox.bind("<<ListboxSelect>>", self.callback_stream_selected)
+        
+        scrollbar.config(command=self.listbox.yview)
+        
+        button_stop.place(relx=0, rely=0)
+        button_play.place(relx=0.18, rely=0)
+        button_close.place(relx=0.5, rely=0)
+        button_shutdown.place(relx=0.7, rely=0)
+        
+        scrollbar.place(relx=0.9, rely=0.2, relheight=0.7)
+        
+        self.listbox.place(relx=0, rely=0.2, relwidth=0.9, relheight=0.7)
+        self.text.place(relx=0, rely=0.9)
+        self.root.protocol("WM_DELETE_WINDOW", self.callback_close)
+    
+    def trim_line(self, line):
+        ret = line[:(self.columns-3)]
+        if len(line.strip()) > self.columns:
+            return  ret + '...'
+        else:
+            return ret
+
+    def highlight_selected_stream(self):
+        if self.selected_stream is not None:
+            idx = self.stream_urls.index(self.selected_stream['url'])
+            self.listbox.selection_set(idx)
+            self.listbox.see(idx)
+    
+    def display_stream_names(self):
+        def _insert_stream_name_txt(idx):
+            txt = self.streams[idx]['name']
+            if txt != '':
+                dbg("insert_stream_name_txt: insert loop: idx: %i" %idx)
+                self.listbox.delete(idx)
+                self.listbox.insert(idx, self.trim_line(txt))
+        for idx,stream in enumerate(self.streams):
+            if self.streams[idx].has_key('name'):
+                self.root.after_idle(_insert_stream_name_txt, idx)
+        self.root.after_idle(self.highlight_selected_stream)
+
+
+class Model(object):
+    def __init__(self):
+        
         # time interval for queue polling loops
         self._poll_sleep_s = 1 # seconds
         self._poll_sleep_ms = int(self._poll_sleep_s * 1000)
@@ -73,48 +136,6 @@ class Player(object):
         #  ]
         self.streams = self.load_streams()
         self.stream_urls = [stream['url'] for stream in self.streams]
-        
-        button_play = Button(root, 
-                             text="Play", 
-                             command=self.callback_play)
-        
-        button_stop = Button(root, 
-                             text="Stop", 
-                             command=self.callback_stop)
-
-        button_shutdown = Button(root, 
-                                 text="Shut down", 
-                                 command=self.callback_shutdown)
-
-        button_close = Button(root, 
-                              text="Close", 
-                              command=self.callback_close)
-
-        text = Text(root, height=1)
-        
-        scrollbar = Scrollbar(root, width=30)
-        font = tkFont.Font(size=FONTSIZE)
-        listbox = Listbox(root, 
-                          yscrollcommand=scrollbar.set,
-                          selectmode=SINGLE,
-                          font=font)
-        listbox.bind("<<ListboxSelect>>", self.callback_stream_selected)
-        for idx,url in enumerate(self.stream_urls):
-            listbox.insert(idx, trim(url))
-        scrollbar.config(command=listbox.yview)
-        
-        button_stop.place(relx=0, rely=0)
-        button_play.place(relx=0.18, rely=0)
-        button_close.place(relx=0.5, rely=0)
-        button_shutdown.place(relx=0.7, rely=0)
-        scrollbar.place(relx=0.9, rely=0.2, relheight=0.7)
-        listbox.place(relx=0, rely=0.2, relwidth=0.9, relheight=0.7)
-        text.place(relx=0, rely=0.9)
-        
-        self.text = text
-        self.root = root
-        self.listbox = listbox
-        root.protocol("WM_DELETE_WINDOW", self.callback_close)
         
         self.metadata_queue = queue.LifoQueue()
 
@@ -222,24 +243,6 @@ class Player(object):
                 break
         self.root.after(self._poll_sleep_ms, self.poll_queue_playing_stream_metadata)
 
-    def highlight_selected_stream(self):
-        if self.selected_stream is not None:
-            idx = self.stream_urls.index(self.selected_stream['url'])
-            self.listbox.selection_set(idx)
-            self.listbox.see(idx)
-    
-    def display_stream_names(self):
-        def _insert_stream_name_txt(idx):
-            txt = self.streams[idx]['name']
-            if txt != '':
-                dbg("insert_stream_name_txt: insert loop: idx: %i" %idx)
-                self.listbox.delete(idx)
-                self.listbox.insert(idx, trim(txt))
-        for idx,stream in enumerate(self.streams):
-            if self.streams[idx].has_key('name'):
-                self.root.after_idle(_insert_stream_name_txt, idx)
-        self.root.after_idle(self.highlight_selected_stream)
-
     def action_load_last_stream(self):
         if os.path.exists(self._fn_last_stream):
             self.selected_stream = self.load_streams(fn=self._fn_last_stream)[0]
@@ -297,7 +300,14 @@ class Mplayer(object):
                 return self.old_meta
     
 
-class MplayerJson(Player, Mplayer):
+class TkPlayer(TkView, Model):
+    def __init__(self, root):
+        # oldskool!
+        TkView.__init__(self, root)
+        Model.__init__(self)
+
+
+class TkMplayer(TkPlayer, Mplayer):
     _fn_last_stream = pj(CONF, 'last_stream.json')
 
     @staticmethod
@@ -335,10 +345,8 @@ if __name__ == '__main__':
 
     root = Tk()
     root.geometry("320x210")
-    FONTSIZE = 15
-    COLUMNS = 26
     root.wm_title("raspi radio")
     if args.verbose:
         VERBOSE = True
-    p = MplayerJson(root)
+    p = TkMplayer(root)
     root.mainloop()
