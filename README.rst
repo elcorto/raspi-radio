@@ -14,13 +14,11 @@ the Raspberry Pi model B+ don't use much resources, so that's OK.
 See ``screenshots/`` for some images.
 
 There is no connection to icecast servers, so no search by genre etc. Also, we
-use ``mplayer`` for playing streams and we therefore don't need ``mpd`` and
-``mpc`` (but see below).
+use ``mplayer`` for playing streams instead of ``mpd`` and ``mpc``.
 
 Start the radio with::
 
     ./player.py
-
 
 Streams
 -------
@@ -51,6 +49,8 @@ Copy all files to the raspi::
     
     [me@mybox ~/.../git/raspi-radio]$ scp -r * raspi:raspi-radio/
     [me@mybox ~/.../git/raspi-radio]$ scp ~/.raspi-radio/streams* raspi:.raspi-radio/
+
+(... or clone the repo).
 
 On the raspi, make sure that the radio starts up when X comes up, but not when
 we log in via ssh. We use an Xsession startup script::
