@@ -1,7 +1,7 @@
 #!/usr/bin/python
 
 import os, json, tkFont, socket, subprocess, threading, time, types, \
-    signal, re, sys, shlex, argparse
+    re, sys, shlex, argparse
 import Queue as queue
 from Tkinter import TOP, BOTTOM, LEFT, RIGHT, SINGLE, END, X, Y, BOTH, \
     INSERT, Button, Scrollbar, Listbox, Tk, Text
@@ -197,10 +197,6 @@ class Player(object):
         self.callback_stop()
         self.root.destroy()
     
-    def show_txt_in_text_field(self, txt):
-        self.text.delete(1.0, END)
-        self.text.insert(END, txt)
-
     def fill_queue_playing_stream_metadata(self):
         while True:
             if self._flag_stop_all_threads:
@@ -211,13 +207,16 @@ class Player(object):
             time.sleep(self._fill_metadata_sleep)
 
     def poll_queue_playing_stream_metadata(self):
+        def _fill_txt_field(txt):
+            self.text.delete(1.0, END)
+            self.text.insert(END, txt)
         oldtxt = ' '
         while True:
             try:
                 txt = self.metadata_queue.get(block=False, timeout=1)
                 dbg("    poll_queue_playing_stream_metadata: txt: %s" %txt)
                 if txt != oldtxt:
-                    self.root.after_idle(self.show_txt_in_text_field, txt)
+                    self.root.after_idle(_fill_txt_field, txt)
                 oldtxt = txt
             except queue.Empty:
                 break
@@ -230,17 +229,16 @@ class Player(object):
             self.listbox.see(idx)
     
     def display_stream_names(self):
+        def _insert_stream_name_txt(idx):
+            txt = self.streams[idx]['name']
+            if txt != '':
+                dbg("insert_stream_name_txt: insert loop: idx: %i" %idx)
+                self.listbox.delete(idx)
+                self.listbox.insert(idx, trim(txt))
         for idx,stream in enumerate(self.streams):
             if self.streams[idx].has_key('name'):
-                self.root.after_idle(self.insert_stream_name_txt, idx)
+                self.root.after_idle(_insert_stream_name_txt, idx)
         self.root.after_idle(self.highlight_selected_stream)
-    
-    def insert_stream_name_txt(self, idx):
-        txt = self.streams[idx]['name']
-        if txt != '':
-            dbg("insert_stream_name_txt: insert loop: idx: %i" %idx)
-            self.listbox.delete(idx)
-            self.listbox.insert(idx, trim(txt))
 
     def action_load_last_stream(self):
         if os.path.exists(self._fn_last_stream):
