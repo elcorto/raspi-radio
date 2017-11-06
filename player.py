@@ -286,8 +286,24 @@ class Mplayer(object):
             dbg("old mtime: %s, mtime: %s" %(self.old_mtime, mtime))
             if mtime > self.old_mtime:   
                 dbg("new mtime")
+                # Parse stream title info such as
+                #   ICY Info: StreamTitle='Band - Song';StreamUrl='http://www...';
+                # The regex must be non-greedy (".*?" instead of ".*"),
+                # otherwise it will match only between the first and very last
+                # "'" and thus have ...StreamUrl... in the match as well.
+                # 
+                # This (single quote in title)
+                #   StreamTitle='foo's bar';StreamUrl='http://...';
+                # gets converted to
+                #   foo
+                # instead of
+                #   foo's bar
+                # if we use "(.*?)';*" instead of "(.*?)';+" -- note the "+"
+                # modifier. This makes it possible to parse titles with single
+                # quotes in them. This assumes that we always have a ";" after
+                # StreamTitle='...'.
                 with open(self._fn_mplayer_stdout) as fd:
-                    lst = re.findall(r".*StreamTitle='(.*?)';*.*", fd.read(), re.M)
+                    lst = re.findall(r".*StreamTitle='(.*?)';+.*", fd.read(), re.M)
                     if lst == []:
                         dbg("no stream metadata in %s" %self._fn_mplayer_stdout)
                         return ''
